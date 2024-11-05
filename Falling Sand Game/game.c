@@ -88,12 +88,12 @@ void tick(fsgame_t* game) {
 		mat_type = game->grid[i];
 		mat = game->materials[mat_type];
 
-		game->grid[i] = AIR;
-
 		if(mat_type == AIR || outof_grid(i, mat.speed, mat.direction) ||
 				mat.death_chance != 0 && (/*material.death_chance == DEATH_CHANCE_MAX ||*/ mat.death_chance > xorshift32_n(&game->rand_state, DEATH_CHANCE_MAX))) {
 			continue;
 		}
+
+		game->grid[i] = AIR;
 
 		new_cell_pos = i 
 			+ ((mat.direction & DOWN) != 0) * mat.speed * GRID_WIDTH
