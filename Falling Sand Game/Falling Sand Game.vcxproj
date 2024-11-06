@@ -71,11 +71,11 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>N:\Prog\Other\C\External Libraries\raylib\include;$(IncludePath)</IncludePath>
+    <IncludePath>N:\Prog\Other\C\External Libraries\gl;N:\Prog\Other\C\External Libraries\raylib\include;$(IncludePath)</IncludePath>
     <LibraryPath>N:\Prog\Other\C\External Libraries\raylib\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>N:\Prog\Other\C\External Libraries\raylib\include;$(IncludePath)</IncludePath>
+    <IncludePath>N:\Prog\Other\C\External Libraries\gl;N:\Prog\Other\C\External Libraries\raylib\include;$(IncludePath)</IncludePath>
     <LibraryPath>N:\Prog\Other\C\External Libraries\raylib\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -145,11 +145,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="bitset.c" />
     <ClCompile Include="game.c" />
     <ClCompile Include="include\arena.c" />
     <ClCompile Include="main.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="bitset.h" />
     <ClInclude Include="game.h" />
     <ClInclude Include="include\arena.h" />
     <ClInclude Include="include\rand_xorshift.h" />

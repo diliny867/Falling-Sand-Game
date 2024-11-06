@@ -21,14 +21,14 @@
     <ClCompile Include="include\arena.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="bitset.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="game.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="game.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="include\arena.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -36,6 +36,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\rand_xorshift.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bitset.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="game.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -32,6 +32,11 @@ typedef float float32_t;
 typedef double float64_t;
 
 typedef struct {
+	uint8_t r, g, b, a;
+} rgba_t;
+
+typedef struct {
+	rgba_t color;
 	uint8_t speed;
 	uint8_t direction;
 	uint8_t death_chance; // survivability chance: 0 to 255 (255 is 100%)
@@ -54,8 +59,10 @@ typedef struct {
 } fsgame_t; // falling_sand_game_t
 
 
-fsgame_t* new_game(arena_t* a);
+fsgame_t* game_new(arena_t* a);
 
-void init_game(fsgame_t* game);
+void game_init(fsgame_t* game);
 
-void tick(fsgame_t* game);
+void game_tick(fsgame_t* game);
+
+void game_place(fsgame_t* game, material_type_e_t material, int x, int y, int size, int scatter, bool round);
