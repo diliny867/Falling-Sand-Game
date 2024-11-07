@@ -3,11 +3,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "bitset.h"
 #include "include/arena.h"
 #include "include/rand_xorshift.h"
 
-#define GRID_WIDTH 1024
-#define GRID_HEIGHT 1024
+#define GRID_WIDTH 100
+#define GRID_HEIGHT 100
 #define GRID_SIZE (GRID_WIDTH * GRID_HEIGHT)
 
 typedef enum {
@@ -53,7 +54,9 @@ typedef struct {
 
 typedef struct {
 	material_type_e_t grid[GRID_SIZE];
+	int index_shuffle[GRID_SIZE];
 	material_t materials[MATERIALS_COUNT];
+	bitset_t updated_cells_bitset[BITSET_SIZE_ARRAY(GRID_SIZE)];
 	arena_t* arena;
 	xorshift32_state rand_state;
 } fsgame_t; // falling_sand_game_t

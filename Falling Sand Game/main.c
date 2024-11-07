@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "glad/glad.h"
 #include "raylib.h"
+#include "rlgl.h"
 #include "raymath.h"
 
 #include "game.h"
@@ -39,13 +39,17 @@ Color rgba_to_color(rgba_t rgba) {
     return (Color){ rgba.r, rgba.g, rgba.b, rgba.a };
 }
 
+#define GRID_CELL_SIZE 10.f
+
 int main(void) {
     Vector2 screen = (Vector2){800, 450};
     
     InitWindow(screen.x, screen.y, "Window title");
 
-    mouse_t mouse;
+    Shader shader_grid_bg = LoadShader("resources/grid_bg.vert", "resources/grid_bg.frag");
 
+    mouse_t mouse;
+    
     arena_t* arena = arena_new();
     fsgame_t* game = game_new(arena);
     game_init(game);
@@ -60,27 +64,32 @@ int main(void) {
     camera.rotation = 0.0f;
     camera.zoom = 0.1f;
 
-    float grid_cell_size = 10;
-    Vector2 grid_start = {-GRID_WIDTH / 2, -GRID_HEIGHT / 2};
-    grid_start = Vector2Scale(grid_start, grid_cell_size);
+    Vector2 grid_start = {-GRID_WIDTH / 2.f, -GRID_HEIGHT / 2.f};
+    grid_start = Vector2Scale(grid_start, GRID_CELL_SIZE);
     for (int i = 0; i < GRID_SIZE; i++){
-        grid[i].width = grid_cell_size;
-    	grid[i].height = grid_cell_size;
+        grid[i].width = GRID_CELL_SIZE;
+    	grid[i].height = GRID_CELL_SIZE;
         int y = i / GRID_WIDTH;
         int x = i - y * GRID_WIDTH;
-        grid[i].x = grid_start.x + x * grid_cell_size - grid_cell_size / 2;
-        grid[i].y = grid_start.y + y * grid_cell_size - grid_cell_size / 2;
+        grid[i].x = grid_start.x + x * GRID_CELL_SIZE;
+        grid[i].y = grid_start.y + y * GRID_CELL_SIZE;
     }
 
-    float grid_outline_thickness = 5;
+    float grid_outline_thickness = 5 * GRID_CELL_SIZE;
     Rectangle grid_outline;
-    grid_outline.x = grid_start.x - grid_outline_thickness / 2;
-    grid_outline.y = grid_start.y - grid_outline_thickness / 2;
-    grid_outline.width = GRID_WIDTH * grid_cell_size + grid_outline_thickness / 2;
-    grid_outline.height = GRID_HEIGHT * grid_cell_size + grid_outline_thickness / 2;
+    grid_outline.x = grid_start.x - grid_outline_thickness;
+    grid_outline.y = grid_start.y - grid_outline_thickness;
+    grid_outline.width = GRID_WIDTH * GRID_CELL_SIZE + grid_outline_thickness * 2;
+    grid_outline.height = GRID_HEIGHT * GRID_CELL_SIZE + grid_outline_thickness * 2;
 
     Color color;
-    
+
+    Image imBlank = GenImageColor(GRID_WIDTH, GRID_HEIGHT, BLANK);
+    Texture2D texture = LoadTextureFromImage(imBlank);
+    UnloadImage(imBlank);
+    float time = 0.0f;
+    int timeLoc = GetShaderLocation(shader_grid_bg, "uTime");
+
     SetTargetFPS(60);
 
     while (!WindowShouldClose()) {
@@ -90,7 +99,7 @@ int main(void) {
         mouse.left = (mouse_button_t){IsMouseButtonPressed(MOUSE_BUTTON_LEFT), IsMouseButtonReleased(MOUSE_BUTTON_LEFT), IsMouseButtonDown(MOUSE_BUTTON_LEFT)};
         mouse.middle = (mouse_button_t){IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE), IsMouseButtonReleased(MOUSE_BUTTON_MIDDLE), IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)};
         mouse.right = (mouse_button_t){IsMouseButtonPressed(MOUSE_BUTTON_RIGHT), IsMouseButtonReleased(MOUSE_BUTTON_RIGHT), IsMouseButtonDown(MOUSE_BUTTON_RIGHT)};
-
+        
         Vector2 mouse_world_pre_zoom = GetScreenToWorld2D(mouse.pos, camera);
 
         camera.zoom += GetMouseWheelMove() * 0.035f;
@@ -119,8 +128,9 @@ int main(void) {
         }
 
         if(mouse.left.down) {
-            Vector2i grid_pos = world_to_grid(mouse.pos_world, grid_start, grid_cell_size);
-            game_place(game, SAND, grid_pos.x, grid_pos.y, 50, 20, true);
+            Vector2i grid_pos = world_to_grid(mouse.pos_world, grid_start, GRID_CELL_SIZE);
+            //game_place(game, SAND, grid_pos.x, grid_pos.y, 50, 20, true);
+            game_place(game, SAND, grid_pos.x, grid_pos.y, 10, 0, true);
         }
 
         if(!IsKeyDown(KEY_SPACE)) {
@@ -132,14 +142,20 @@ int main(void) {
         ClearBackground((Color){ 30, 30, 30, 255 });
 
         BeginMode2D(camera);
-
+        
         for(int i = 0; i < GRID_SIZE; i++) {
             color = rgba_to_color(game->materials[game->grid[i]].color);
             DrawRectangleRec(grid[i], color);
         }
         
-        DrawRectangleLinesEx(grid_outline, grid_outline_thickness * grid_cell_size, (Color){80, 80, 80, 255});
+        DrawRectangleLinesEx(grid_outline, grid_outline_thickness, (Color){80, 80, 80, 255});
 
+        time = (float)GetTime();
+        SetShaderValue(shader_grid_bg, timeLoc, &time, SHADER_UNIFORM_FLOAT);
+        BeginShaderMode(shader_grid_bg);
+        DrawTexture(texture, grid_start.x, grid_start.y, WHITE);
+        EndShaderMode();
+        
         EndMode2D();
 
         DrawFPS(10, 10);
