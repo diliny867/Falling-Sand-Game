@@ -241,41 +241,6 @@ void game_tick(fsgame_t* game) {
 			SWAP(material_type_e_t, game->grid[index], game->grid[new_index]);
 			bitset_set_weak(game->updated_cells_bitset, new_index, mat_type != AIR);
 		}
-
-		/*
-		new_index = index
-			+ ((mat.direction & DOWN)  != 0) * random_speed * GRID_WIDTH
-			- ((mat.direction & UP)    != 0) * random_speed * GRID_WIDTH;
-		//	+ ((mat.direction & SIDES) != 0) * random_speed
-		//	- ((mat.direction & SIDES) != 0) * random_speed;
-
-		if(!outof_grid(new_index) && game->grid[new_index] != AIR && mat.direction & SIDES) {
-			const int delta = -1 + xorshift32_n(&game->rand_state, 3);
-			const int grid_x = new_index % GRID_WIDTH;
-
-			int new_grid_x = clamp_grid_w(grid_x + delta);
-			int new_index2 = new_index - grid_x + new_grid_x;
-			if(!outof_grid(new_index2) && game->grid[new_index2] == AIR) {
-				new_index = new_index2;
-			}else {
-				new_grid_x = clamp_grid_w(grid_x - delta);
-				new_index2 = new_index - grid_x + new_grid_x;
-				if(!outof_grid(new_index2) && game->grid[new_index2] == AIR) {
-					new_index = new_index2;
-				}else {
-					random_speed = -mat.speed + xorshift32_n(&game->rand_state, mat.speed * 2 + 1);
-					new_index = index + ((mat.direction & SIDES) != 0) * random_speed;
-				}
-			}
-		}
-
-		if(!outof_grid(new_index) && game->grid[new_index] == AIR) {
-			game->grid[index] = AIR;
-			game->grid[new_index] = mat_type;
-			bitset_set_weak(game->updated_cells_bitset, new_index, mat_type != AIR);
-		}
-		*/
-
 	}
 
 	//printf("\n");
