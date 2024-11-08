@@ -4,7 +4,7 @@
 #include <threads.h>
 
 #include "glad/glad.h"
-#include "raylib.h"
+#include "raylib.h" //recompiled for opengl 4.3
 #include "rlgl.h"
 #include "raymath.h"
 
@@ -47,6 +47,7 @@ fsgame_t* game;
 mtx_t game_mutex;
 bool app_running = true;
 long simulation_interval = 1000000000L / 60;
+bool update_ssbo = false;
 
 struct timespec get_curr_time(void) {
     struct timespec current_time;
@@ -70,23 +71,36 @@ int thread_game_simulate(void* arg) {
     time_t duration;
     struct timespec start_time, end_time, duration_time;
     while(true) {
-        mtx_lock(&game_mutex);
         if(!app_running) {
             break;
         }
     	start_time = get_curr_time();
 
+        mtx_lock(&game_mutex);
         if(!IsKeyDown(KEY_SPACE)) {
             game_tick(game);
+            update_ssbo = true;
         }
+        mtx_unlock(&game_mutex);
 
         end_time = get_curr_time();
         duration = time_clamp(simulation_interval - nsec_diff(start_time, end_time), 0, simulation_interval);
-        duration_time = (struct timespec){ duration / 1000000000L, duration % 1000000000L };
-    	mtx_unlock(&game_mutex);
+        duration_time = (struct timespec){ duration / 1000000000LL, duration % 1000000000LL };
         thrd_sleep(&duration_time, NULL);
     }
     return 0;
+}
+
+void matrix_print(Matrix mat){
+    printf("[\n");
+    printf("  %f %f %f %f\n", mat.m0, mat.m4, mat.m8, mat.m12);
+    printf("  %f %f %f %f\n", mat.m1, mat.m5, mat.m9, mat.m13);
+    printf("  %f %f %f %f\n", mat.m2, mat.m6, mat.m10, mat.m14);
+    printf("  %f %f %f %f\n", mat.m3, mat.m7, mat.m11, mat.m15);
+    printf("]\n");
+}
+void vector3_print(Vector3 v) {
+    printf("%f, %f, %f\n", v.x, v.y, v.z);
 }
 
 int main(void) {
@@ -95,7 +109,7 @@ int main(void) {
     InitWindow(screen.x, screen.y, "Window title");
 
     Shader shader_grid_bg = LoadShader("resources/grid_bg.vert", "resources/grid_bg.frag");
-
+    
     mouse_t mouse;
     
     arena_t* arena = arena_new();
@@ -130,19 +144,60 @@ int main(void) {
     grid_outline.width = GRID_WIDTH * GRID_CELL_SIZE + grid_outline_thickness * 2;
     grid_outline.height = GRID_HEIGHT * GRID_CELL_SIZE + grid_outline_thickness * 2;
 
-    Color color;
+    Matrix grid_scale_matrix = MatrixScale(GRID_CELL_SIZE, GRID_CELL_SIZE, 0);
+    Matrix grid_translate_matrix = MatrixTranslate(grid_start.x, grid_start.y, 0);
+    Matrix grid_model_matrix = MatrixMultiply(grid_scale_matrix, grid_translate_matrix);
+    Matrix projection = MatrixOrtho(0, screen.x, screen.y, 0, -1.f, 1.f);
 
     material_type_e_t current_material = SAND;
 
-    Image imBlank = GenImageColor(GRID_WIDTH, GRID_HEIGHT, BLANK);
-    Texture2D texture = LoadTextureFromImage(imBlank);
-    UnloadImage(imBlank);
-    float time = 0.0f;
-    int timeLoc = GetShaderLocation(shader_grid_bg, "uTime");
+    unsigned int grid_ssbo = rlLoadShaderBuffer(GRID_SIZE * sizeof(game->grid[0]), game->grid, 0);
+    unsigned int quadVAO = 0;
+    unsigned int quadVBO = 0;
+    unsigned int quadEBO = 0;
+    float vertices[] = {
+        // Positions         Texcoords
+        1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+        1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f, 1.0f,
+        0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+    };
+    unsigned int indices[] = {
+        0, 1, 2,
+        0, 2, 3
+    };
+    quadVAO = rlLoadVertexArray();
+    rlEnableVertexArray(quadVAO);
+    quadVBO = rlLoadVertexBuffer(vertices, sizeof(vertices), false);
+    quadEBO = rlLoadVertexBufferElement(indices, sizeof(indices), false);
+    rlEnableVertexAttribute(0);
+    rlSetVertexAttribute(0, 3, RL_FLOAT, false, 5*sizeof(float), (void*)0);
+	rlEnableVertexAttribute(1);
+    rlSetVertexAttribute(1, 2, RL_FLOAT, false, 5*sizeof(float), (void *)(3*sizeof(float)));
+    rlDisableVertexArray();
+
+    int shader_mvp_loc = GetShaderLocation(shader_grid_bg, "mvp");
+    
+    int shader_grid_width_loc = rlGetLocationUniform(shader_grid_bg.id, "grid_width");
+    int shader_material_colors_loc = rlGetLocationUniform(shader_grid_bg.id, "material_colors");
+
+    Vector4* material_colors = arena_alloc(arena, sizeof(Vector4) * MATERIALS_COUNT);
+    for(int i = 0; i < MATERIALS_COUNT; i++) {
+        rgba_t col = game->materials[i].color;
+        material_colors[i].x = col.r / 255.f;
+        material_colors[i].y = col.g / 255.f;
+    	material_colors[i].z = col.b / 255.f;
+    	material_colors[i].w = col.a / 255.f;
+    }
+
+    rlEnableShader(shader_grid_bg.id);
+    rlBindShaderBuffer(grid_ssbo, 4);
+    int grid_width = GRID_WIDTH;
+    rlSetUniform(shader_grid_width_loc, &grid_width, RL_SHADER_UNIFORM_INT, 1);
+    rlSetUniform(shader_material_colors_loc, material_colors, RL_SHADER_UNIFORM_VEC4, MATERIALS_COUNT);
 
     mtx_init(&game_mutex, mtx_plain);
     thrd_t game_thread;
-    int game_simulation_tps = 60;
     thrd_create(&game_thread, thread_game_simulate, NULL);
 
     SetTargetFPS(60);
@@ -194,28 +249,38 @@ int main(void) {
         if(mouse.left.down) {
             Vector2i grid_pos = world_to_grid(mouse.pos_world, grid_start, GRID_CELL_SIZE);
             //game_place(game, SAND, grid_pos.x, grid_pos.y, 50, 20, true);
+            mtx_lock(&game_mutex);
             game_place(game, current_material, grid_pos.x, grid_pos.y, 10, 20, true);
+            rlUpdateShaderBuffer(grid_ssbo, game->grid, GRID_SIZE * sizeof(game->grid[0]), 0);
+            mtx_unlock(&game_mutex);
         }
 
         BeginDrawing();
 
         ClearBackground((Color){ 30, 30, 30, 255 });
 
+        if(update_ssbo){
+            rlUpdateShaderBuffer(grid_ssbo, game->grid, GRID_SIZE * sizeof(game->grid[0]), 0);
+            update_ssbo = false;
+        }
+
+        Matrix model_view = GetCameraMatrix2D(camera);
+        model_view = MatrixMultiply(grid_model_matrix, model_view);
+        Matrix mvp = MatrixMultiply(model_view, projection);
+        rlEnableShader(shader_grid_bg.id);
+        rlSetUniformMatrix(shader_mvp_loc, mvp);
+        rlEnableVertexArray(quadVAO);
+        glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, GRID_SIZE);
+        rlDisableVertexArray();
+
         BeginMode2D(camera);
 
-        mtx_lock(&game_mutex);
-        for(int i = 0; i < GRID_SIZE; i++) {
-            color = rgba_to_color(game->materials[game->grid[i]].color);
-            DrawRectangleRec(grid[i], color);
-        }
-        mtx_unlock(&game_mutex);
+        //for(int i = 0; i < GRID_SIZE; i++) {
+        //    color = rgba_to_color(game->materials[game->grid[i]].color);
+        //    DrawRectangleRec(grid[i], color);
+        //}
+
         DrawRectangleLinesEx(grid_outline, grid_outline_thickness, (Color){80, 80, 80, 255});
-        
-        time = (float)GetTime();
-        SetShaderValue(shader_grid_bg, timeLoc, &time, SHADER_UNIFORM_FLOAT);
-        BeginShaderMode(shader_grid_bg);
-        DrawTexture(texture, grid_start.x, grid_start.y, WHITE);
-        EndShaderMode();
         
         EndMode2D();
 

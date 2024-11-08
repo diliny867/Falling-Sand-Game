@@ -8,8 +8,8 @@
 #include "include/arena.h"
 #include "include/rand_xorshift.h"
 
-#define GRID_WIDTH 100
-#define GRID_HEIGHT 100
+#define GRID_WIDTH 1024
+#define GRID_HEIGHT 1024
 #define GRID_SIZE (GRID_WIDTH * GRID_HEIGHT)
 
 typedef enum {
