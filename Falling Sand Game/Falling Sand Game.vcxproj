@@ -115,6 +115,7 @@
       <CompileAs>CompileAsC</CompileAs>
       <LanguageStandard />
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -134,6 +135,7 @@
       <CompileAs>CompileAsC</CompileAs>
       <LanguageStandard />
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -152,6 +154,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="bitset.h" />
+    <ClInclude Include="common.h" />
     <ClInclude Include="game.h" />
     <ClInclude Include="include\arena.h" />
     <ClInclude Include="include\rand_xorshift.h" />

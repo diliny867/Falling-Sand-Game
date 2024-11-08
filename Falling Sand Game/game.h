@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "common.h"
 #include "bitset.h"
 #include "include/arena.h"
 #include "include/rand_xorshift.h"
@@ -25,8 +26,7 @@ typedef enum {
 typedef enum {
 	DOWN		= 0x1,
 	UP			= 0x2,
-	LEFT		= 0x4,
-	RIGHT		= 0x8,
+	SIDES		= 0x4
 } flag_direction_e_t;
 
 typedef float float32_t;

@@ -1,7 +1,9 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <threads.h>
 
+#include "glad/glad.h"
 #include "raylib.h"
 #include "rlgl.h"
 #include "raymath.h"
@@ -41,9 +43,55 @@ Color rgba_to_color(rgba_t rgba) {
 
 #define GRID_CELL_SIZE 10.f
 
+fsgame_t* game;
+mtx_t game_mutex;
+bool app_running = true;
+long simulation_interval = 1000000000L / 60;
+
+struct timespec get_curr_time(void) {
+    struct timespec current_time;
+    timespec_get(&current_time, TIME_UTC);
+    return current_time;
+}
+time_t nsec_diff(struct timespec start, struct timespec end) {
+    return (end.tv_sec - start.tv_sec) * 1000000000LL + (start.tv_nsec - end.tv_nsec);
+}
+
+time_t time_clamp(time_t val, time_t min, time_t max) {
+	if(val < min) {
+        return min;
+	}
+    if(val > max) {
+        return val;
+    }
+    return val;
+}
+int thread_game_simulate(void* arg) {
+    time_t duration;
+    struct timespec start_time, end_time, duration_time;
+    while(true) {
+        mtx_lock(&game_mutex);
+        if(!app_running) {
+            break;
+        }
+    	start_time = get_curr_time();
+
+        if(!IsKeyDown(KEY_SPACE)) {
+            game_tick(game);
+        }
+
+        end_time = get_curr_time();
+        duration = time_clamp(simulation_interval - nsec_diff(start_time, end_time), 0, simulation_interval);
+        duration_time = (struct timespec){ duration / 1000000000L, duration % 1000000000L };
+    	mtx_unlock(&game_mutex);
+        thrd_sleep(&duration_time, NULL);
+    }
+    return 0;
+}
+
 int main(void) {
-    Vector2 screen = (Vector2){800, 450};
-    
+    Vector2 screen = (Vector2){1200, 650};
+
     InitWindow(screen.x, screen.y, "Window title");
 
     Shader shader_grid_bg = LoadShader("resources/grid_bg.vert", "resources/grid_bg.frag");
@@ -51,7 +99,7 @@ int main(void) {
     mouse_t mouse;
     
     arena_t* arena = arena_new();
-    fsgame_t* game = game_new(arena);
+    game = game_new(arena);
     game_init(game);
 
     Vector2 pos = {0, 0};
@@ -84,15 +132,22 @@ int main(void) {
 
     Color color;
 
+    material_type_e_t current_material = SAND;
+
     Image imBlank = GenImageColor(GRID_WIDTH, GRID_HEIGHT, BLANK);
     Texture2D texture = LoadTextureFromImage(imBlank);
     UnloadImage(imBlank);
     float time = 0.0f;
     int timeLoc = GetShaderLocation(shader_grid_bg, "uTime");
 
-    SetTargetFPS(60);
+    mtx_init(&game_mutex, mtx_plain);
+    thrd_t game_thread;
+    int game_simulation_tps = 60;
+    thrd_create(&game_thread, thread_game_simulate, NULL);
 
-    while (!WindowShouldClose()) {
+    SetTargetFPS(60);
+    
+    while ((app_running = !WindowShouldClose())) {
         mouse.pos = GetMousePosition();
         //printf("%f %f\n", mouse.pos.x, mouse.pos.y);
         mouse.pos_world = GetScreenToWorld2D(mouse.pos, camera);
@@ -127,14 +182,19 @@ int main(void) {
             last_mouse_pos = mouse.pos;
         }
 
+        if(IsKeyPressed(KEY_DOWN)) {
+            current_material--;
+            current_material = clampi(current_material, 0, MATERIALS_COUNT - 1);
+        }
+        if(IsKeyPressed(KEY_UP)) {
+            current_material++;
+            current_material = clampi(current_material, 0, MATERIALS_COUNT - 1);
+        }
+
         if(mouse.left.down) {
             Vector2i grid_pos = world_to_grid(mouse.pos_world, grid_start, GRID_CELL_SIZE);
             //game_place(game, SAND, grid_pos.x, grid_pos.y, 50, 20, true);
-            game_place(game, SAND, grid_pos.x, grid_pos.y, 10, 0, true);
-        }
-
-        if(!IsKeyDown(KEY_SPACE)) {
-            game_tick(game);
+            game_place(game, current_material, grid_pos.x, grid_pos.y, 10, 20, true);
         }
 
         BeginDrawing();
@@ -142,14 +202,15 @@ int main(void) {
         ClearBackground((Color){ 30, 30, 30, 255 });
 
         BeginMode2D(camera);
-        
+
+        mtx_lock(&game_mutex);
         for(int i = 0; i < GRID_SIZE; i++) {
             color = rgba_to_color(game->materials[game->grid[i]].color);
             DrawRectangleRec(grid[i], color);
         }
-        
+        mtx_unlock(&game_mutex);
         DrawRectangleLinesEx(grid_outline, grid_outline_thickness, (Color){80, 80, 80, 255});
-
+        
         time = (float)GetTime();
         SetShaderValue(shader_grid_bg, timeLoc, &time, SHADER_UNIFORM_FLOAT);
         BeginShaderMode(shader_grid_bg);

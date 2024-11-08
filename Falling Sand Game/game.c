@@ -48,6 +48,7 @@ static void init_materials(fsgame_t* game) {
 	SET_MATERIAL_DEFAULT_NONSOLID(*mat);
 	mat->color = (rgba_t){98, 179, 222, 255};
 	mat->direction |= DOWN;
+	mat->direction |= SIDES;
 	mat->speed = 1;
 	mat->density = DENSITY_MAX * 0.3;
 	
@@ -73,6 +74,8 @@ static void init_materials(fsgame_t* game) {
 	SET_MATERIAL_DEFAULT_NONSOLID(*mat);
 	mat->color = (rgba_t){255, 95, 8, 255};
 	mat->direction |= UP;
+	mat->density = DENSITY_MAX * 0.1;
+	mat->death_chance = 5;
 	mat->speed = 1;
 	mat->flaming = true;
 }
@@ -111,30 +114,28 @@ void game_init(fsgame_t* game) {
 
 #define GRID_GET_I(x, y) ((y) * (GRID_WIDTH) + (x))
 
-static inline bool outof_grid(int index, uint8_t speed, uint8_t direction) {
-	return (direction & RIGHT && (index % GRID_WIDTH + speed) >= GRID_WIDTH) ||
-		   (direction & LEFT  && (index % GRID_WIDTH - speed) < 0) ||
-		   (direction & DOWN  && (index + speed * GRID_WIDTH) >= GRID_SIZE) ||
-		   (direction & UP    && (index - speed * GRID_WIDTH) < 0);
+static inline bool outof_grid(int index) {
+	return index < 0 || index >= GRID_SIZE;
+}
+//static inline bool outof_grid_move(int index, uint8_t speed, uint8_t direction) {
+//	return (direction & SIDES && (index % GRID_WIDTH + speed) >= GRID_WIDTH) ||
+//		   (direction & SIDES && (index % GRID_WIDTH - speed) < 0) ||
+//		   (direction & DOWN  && (index + speed * GRID_WIDTH) >= GRID_SIZE) ||
+//		   (direction & UP    && (index - speed * GRID_WIDTH) < 0);
+//}
+static inline bool outof_grid_xy(int x, int y) {
+	return x < 0 || x >= GRID_WIDTH || y < 0 || y >= GRID_HEIGHT;
 }
 
-static int clamp(int val, int min, int max) {
-	if(val < min) {
-		return min;
-	}
-	if(val > max) {
-		return max;
-	}
-	return val;
-}
 static int clamp_grid_w(int val) {
-	return clamp(val, 0, GRID_WIDTH - 1);
+	return clampi(val, 0, GRID_WIDTH - 1);
 }
 static int clamp_grid_h(int val) {
-	return clamp(val, 0, GRID_HEIGHT - 1);
+	return clampi(val, 0, GRID_HEIGHT - 1);
 }
 
 void game_place(fsgame_t* game, material_type_e_t material, int x, int y, int size, int scatter, bool round) {
+	const int half_scatter = scatter / 2;
 #ifdef GRID_PLACE_PRE_CLAMP
 	int half_size = size / 2;
 	int x_to = clamp_grid_w(x + half_size);
@@ -158,19 +159,21 @@ void game_place(fsgame_t* game, material_type_e_t material, int x, int y, int si
 	const int half_size = size / 2;
 	const int x_to = x + half_size;
 	const int y_to = y + half_size;
-	int dx, dy;
+	int dx, dy, sx, sy;
 	for(int y0 = y - half_size; y0 < y_to; y0++) {
 		for(int x0 = x - half_size; x0 < x_to; x0++) {
+			sx = -half_scatter + xorshift32_n(&game->rand_state, scatter + 1);
+			sy = -half_scatter + xorshift32_n(&game->rand_state, scatter + 1);
 			if(round){
 				dx = x0 - x;
 				dy = y0 - y;
-				if(sqrtf(dx * dx + dy * dy) > half_size) {
+				dx += sx;
+				dy += sy;
+				if(sqrtf(dx * dx + dy * dy) > half_size + half_scatter) {
 					continue;
 				}
 			}
-			dx = xorshift32_n(&game->rand_state, scatter + 1);
-			dy = xorshift32_n(&game->rand_state, scatter + 1);
-			game->grid[GRID_GET_I(clamp_grid_w(x0 + dx), clamp_grid_h(y0 + dy))] = material;
+			game->grid[GRID_GET_I(clamp_grid_w(x0 + sx), clamp_grid_h(y0 + sy))] = material;
 			//printf("x:%d y:%d", clamp_grid_w(x0 + dx), clamp_grid_h(y0 + dy));
 		}
 	}
@@ -180,44 +183,98 @@ void game_place(fsgame_t* game, material_type_e_t material, int x, int y, int si
 void game_tick(fsgame_t* game) {
 	material_type_e_t mat_type;
 	material_t mat;
-	int index, new_index;
+	int index, new_index, random_speed, i_x, i_y;
+	uint8_t other_density;
 	bitset_clear(game->updated_cells_bitset, BITSET_SIZE_ARRAY(GRID_SIZE));
 	for(int i = 0; i < GRID_SIZE; i++) {
 		index = game->index_shuffle[i];
 		mat_type = game->grid[index];
 		mat = game->materials[mat_type];
 
-		if(mat_type == AIR || bitset_get(game->updated_cells_bitset, index) || outof_grid(index, mat.speed, mat.direction) ||
-				(mat.death_chance != 0 && (/*material.death_chance == DEATH_CHANCE_MAX ||*/ mat.death_chance > xorshift32_n(&game->rand_state, DEATH_CHANCE_MAX)))) {
+		if(mat_type == AIR || bitset_get(game->updated_cells_bitset, index) || outof_grid(index)) {
+			continue;
+		}
+		if(mat.death_chance != 0 && (/*material.death_chance == DEATH_CHANCE_MAX ||*/ mat.death_chance > xorshift32_n(&game->rand_state, DEATH_CHANCE_MAX))) {
+			game->grid[index] = AIR;
+			bitset_set_weak(game->updated_cells_bitset, index, mat_type != AIR);
 			continue;
 		}
 
-		new_index = index 
-			+ ((mat.direction & DOWN) != 0) * mat.speed * GRID_WIDTH
-			- ((mat.direction & UP) != 0) * mat.speed * GRID_WIDTH
-			+ ((mat.direction & RIGHT) != 0) * mat.speed
-			- ((mat.direction & LEFT) != 0) * mat.speed;
+		if(mat.speed <= 0){
+			random_speed = 0;
+		} else{
+			random_speed = xorshift32_n(&game->rand_state, mat.speed) + 1;
+		}
 
-		if(game->grid[new_index] != AIR) {
-			const int delta = -mat.speed + 2 * xorshift32_n(&game->rand_state, mat.speed * 2);
-			const int grid_x = new_index % GRID_WIDTH;
+		i_x = index % GRID_WIDTH;
+		i_y = index / GRID_WIDTH;
+		int new_y = i_y + ((mat.direction & DOWN) != 0) * random_speed - ((mat.direction & UP) != 0) * random_speed;
+		new_index = index + (new_y - i_y) * GRID_WIDTH;
+		if(!outof_grid_xy(i_x, new_y) && game->grid[new_index] != AIR && mat.direction & SIDES) {
+			const int delta = -1 + xorshift32_n(&game->rand_state, 3);
 
-			int new_grid_x = clamp_grid_w(grid_x + delta);
-			if(game->grid[new_index - grid_x + new_grid_x] == AIR) {
-				new_index = new_index - grid_x + new_grid_x;
+			int new_x = clamp_grid_w(i_x + delta);
+			int new_index2 = new_index - i_x + new_x;
+			if(!outof_grid_xy(new_x, new_y) && game->materials[game->grid[new_index2]].density < mat.density) {
+				new_index = new_index2;
 			}else {
-				new_grid_x = clamp_grid_w(grid_x - delta);
-				if(game->grid[new_index - grid_x + new_grid_x] == AIR) {
-					new_index = new_index - grid_x + new_grid_x;
+				new_x = clamp_grid_w(i_x - delta);
+				new_index2 = new_index - i_x + new_x;
+				if(!outof_grid_xy(new_x, new_y) && game->materials[game->grid[new_index2]].density < mat.density) {
+					new_index = new_index2;
+				}else {
+					random_speed = -mat.speed + xorshift32_n(&game->rand_state, mat.speed * 2 + 1);
+					new_x =  clamp_grid_w(i_x + ((mat.direction & SIDES) != 0) * random_speed);
+					new_index2 = index - i_x + new_x;
+					if(!outof_grid_xy(i_x, i_y) && game->materials[game->grid[new_index2]].density < mat.density){
+						new_index = new_index2;
+					}
 				}
 			}
 		}
 
-		if(game->grid[new_index] == AIR) {
+		i_x = new_index % GRID_WIDTH;
+		i_y = new_index / GRID_WIDTH;
+		if(!outof_grid_xy(i_x, i_y) && game->materials[game->grid[new_index]].density < mat.density) {
+			//game->grid[index] = AIR;
+			//game->grid[new_index] = mat_type;
+			SWAP(material_type_e_t, game->grid[index], game->grid[new_index]);
+			bitset_set_weak(game->updated_cells_bitset, new_index, mat_type != AIR);
+		}
+
+		/*
+		new_index = index
+			+ ((mat.direction & DOWN)  != 0) * random_speed * GRID_WIDTH
+			- ((mat.direction & UP)    != 0) * random_speed * GRID_WIDTH;
+		//	+ ((mat.direction & SIDES) != 0) * random_speed
+		//	- ((mat.direction & SIDES) != 0) * random_speed;
+
+		if(!outof_grid(new_index) && game->grid[new_index] != AIR && mat.direction & SIDES) {
+			const int delta = -1 + xorshift32_n(&game->rand_state, 3);
+			const int grid_x = new_index % GRID_WIDTH;
+
+			int new_grid_x = clamp_grid_w(grid_x + delta);
+			int new_index2 = new_index - grid_x + new_grid_x;
+			if(!outof_grid(new_index2) && game->grid[new_index2] == AIR) {
+				new_index = new_index2;
+			}else {
+				new_grid_x = clamp_grid_w(grid_x - delta);
+				new_index2 = new_index - grid_x + new_grid_x;
+				if(!outof_grid(new_index2) && game->grid[new_index2] == AIR) {
+					new_index = new_index2;
+				}else {
+					random_speed = -mat.speed + xorshift32_n(&game->rand_state, mat.speed * 2 + 1);
+					new_index = index + ((mat.direction & SIDES) != 0) * random_speed;
+				}
+			}
+		}
+
+		if(!outof_grid(new_index) && game->grid[new_index] == AIR) {
 			game->grid[index] = AIR;
 			game->grid[new_index] = mat_type;
 			bitset_set_weak(game->updated_cells_bitset, new_index, mat_type != AIR);
 		}
+		*/
 
 	}
 
