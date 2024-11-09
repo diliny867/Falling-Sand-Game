@@ -6,10 +6,14 @@ in vec4 frag_color;
 out vec4 out_color;
 
 void main(){
-    vec2 fragPos = frag_tex_coord;
+    vec2 frag_pos = frag_tex_coord;
 
     vec4 color = frag_color;
     //vec3 color = vec3(0.3);
+
+    if(color.a <= 0.001){
+        discard;
+    }
 
     out_color = color;
 }

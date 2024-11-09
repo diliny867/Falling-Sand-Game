@@ -173,20 +173,23 @@ int main(void) {
         0.0f, 0.0f, 0.0f, 1.0f, 1.0f,
         0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
     };
-    unsigned int indices[] = {
-        0, 1, 2,
-        0, 2, 3
-    };
+    //unsigned int indices[] = {
+    //    0, 1, 2,
+    //    0, 2, 3
+    //};
     unsigned int quad_vao, quad_vbo, quad_ebo, grid_material_vbo;
     quad_vao = rlLoadVertexArray();
     rlEnableVertexArray(quad_vao);
     quad_vbo = rlLoadVertexBuffer(vertices, sizeof(vertices), false);
-    quad_ebo = rlLoadVertexBufferElement(indices, sizeof(indices), false);
+    //quad_ebo = rlLoadVertexBufferElement(indices, sizeof(indices), false);
     rlEnableVertexAttribute(0);
     rlSetVertexAttribute(0, 3, RL_FLOAT, false, 5*sizeof(float), (void*)0);
 	rlEnableVertexAttribute(1);
     rlSetVertexAttribute(1, 2, RL_FLOAT, false, 5*sizeof(float), (void *)(3*sizeof(float)));
-    grid_material_vbo = rlLoadVertexBuffer(game->grid, GRID_SIZE * sizeof(game->grid[0]), false);
+    //grid_material_vbo = rlLoadVertexBuffer(game->grid, GRID_SIZE * sizeof(game->grid[0]), false);
+    glGenBuffers(1, &grid_material_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, grid_material_vbo);
+    glBufferData(GL_ARRAY_BUFFER, GRID_SIZE * sizeof(game->grid[0]), game->grid, GL_STREAM_DRAW);
     rlEnableVertexAttribute(2);
     glVertexAttribIPointer(2, 1, GL_INT, 1*sizeof(int), (void *)(0)); // For some reason GL_INT dont work
     rlSetVertexAttributeDivisor(2, 1);
@@ -291,7 +294,10 @@ int main(void) {
         ClearBackground((Color){ 30, 30, 30, 255 });
 
         if(shared_game_place_data.update_maertial_vbo){
-            rlUpdateVertexBuffer(grid_material_vbo, game->grid, GRID_SIZE * sizeof(game->grid[0]), 0);
+            //rlUpdateVertexBuffer(grid_material_vbo, game->grid, GRID_SIZE * sizeof(game->grid[0]), 0);
+            glBindBuffer(GL_ARRAY_BUFFER, grid_material_vbo);
+            glBufferData(GL_ARRAY_BUFFER, GRID_SIZE * sizeof(game->grid[0]), NULL, GL_STREAM_DRAW); // orphan buffer
+            glBufferSubData(GL_ARRAY_BUFFER, 0, GRID_SIZE * sizeof(game->grid[0]), game->grid);
             shared_game_place_data.update_maertial_vbo = false;
         }
 
@@ -302,7 +308,8 @@ int main(void) {
         rlEnableShader(shader_grid_bg.id);
         rlSetUniformMatrix(shader_mvp_loc, mvp);
         rlEnableVertexArray(quad_vao);
-        glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, GRID_SIZE);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, GRID_SIZE);
+        //glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, GRID_SIZE);
         rlDisableVertexArray();
 
         BeginMode2D(camera);
@@ -327,7 +334,7 @@ int main(void) {
 
     rlUnloadVertexArray(quad_vao);
     rlUnloadVertexBuffer(quad_vbo);
-    rlUnloadVertexBuffer(quad_ebo);
+    //rlUnloadVertexBuffer(quad_ebo);
 
     arena_free(arena);
 
