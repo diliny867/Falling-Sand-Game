@@ -7,7 +7,7 @@
 #include <stdatomic.h>
 
 #include "glad/glad.h"
-#include "raylib.h" //recompiled for opengl 4.3 (for ssbo)
+#include "raylib.h"
 #include "rlgl.h"
 #include "raymath.h"
 
@@ -53,7 +53,7 @@ typedef struct {
     atomic_Vector2 mouse_pos_world;
     atomic_long simulation_interval;
     atomic_material_type_e_t current_material;
-    atomic_bool update_ssbo;
+    atomic_bool update_maertial_vbo;
     atomic_bool place;
 } shared_game_place_data_t;
 shared_game_place_data_t shared_game_place_data;
@@ -71,11 +71,7 @@ struct timespec get_curr_time(void) {
 int thread_game_simulate(void* arg) {
     long duration;
     struct timespec start_time, end_time, duration_time;
-    while(true) {
-        if(!app_running) {
-            break;
-        }
-
+    while(app_running) {
     	start_time = get_curr_time();
         mtx_lock(&game_mutex);
 
@@ -83,13 +79,13 @@ int thread_game_simulate(void* arg) {
             Vector2i grid_pos = world_to_grid(shared_game_place_data.mouse_pos_world, shared_game_place_data.grid_start, GRID_CELL_SIZE);
             //game_place(game, SAND, grid_pos.x, grid_pos.y, 50, 20, true);
             game_place(game, shared_game_place_data.current_material, grid_pos.x, grid_pos.y, 10, 20, true);
-            shared_game_place_data.update_ssbo = true;
+            shared_game_place_data.update_maertial_vbo = true;
             shared_game_place_data.place = false;
         }
 
         if(!IsKeyDown(KEY_SPACE)) {
             game_tick(game);
-            shared_game_place_data.update_ssbo = true;
+            shared_game_place_data.update_maertial_vbo = true;
         }
 
         end_time = get_curr_time();
@@ -156,7 +152,7 @@ int main(void) {
     shared_game_place_data.simulation_interval = 1000000000L / 60;
     shared_game_place_data.grid_start = grid_start;
     shared_game_place_data.mouse_pos_world = (Vector2){0, 0};
-    shared_game_place_data.update_ssbo = true;
+    shared_game_place_data.update_maertial_vbo = true;
     shared_game_place_data.place = false;
 
     float grid_outline_thickness = 5 * GRID_CELL_SIZE;
@@ -170,10 +166,6 @@ int main(void) {
     Matrix grid_translate_matrix = MatrixTranslate(grid_start.x, grid_start.y, 0);
     Matrix grid_model_matrix = MatrixMultiply(grid_scale_matrix, grid_translate_matrix);
 
-    unsigned int grid_ssbo = rlLoadShaderBuffer(GRID_SIZE * sizeof(game->grid[0]), game->grid, 0);
-    unsigned int quad_vao = 0;
-    unsigned int quad_vbo = 0;
-    unsigned int quad_ebo = 0;
     float vertices[] = {
         // Positions         Texcoords
         1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
@@ -185,6 +177,7 @@ int main(void) {
         0, 1, 2,
         0, 2, 3
     };
+    unsigned int quad_vao, quad_vbo, quad_ebo, grid_material_vbo;
     quad_vao = rlLoadVertexArray();
     rlEnableVertexArray(quad_vao);
     quad_vbo = rlLoadVertexBuffer(vertices, sizeof(vertices), false);
@@ -193,6 +186,10 @@ int main(void) {
     rlSetVertexAttribute(0, 3, RL_FLOAT, false, 5*sizeof(float), (void*)0);
 	rlEnableVertexAttribute(1);
     rlSetVertexAttribute(1, 2, RL_FLOAT, false, 5*sizeof(float), (void *)(3*sizeof(float)));
+    grid_material_vbo = rlLoadVertexBuffer(game->grid, GRID_SIZE * sizeof(game->grid[0]), false);
+    rlEnableVertexAttribute(2);
+    glVertexAttribIPointer(2, 1, GL_INT, 1*sizeof(int), (void *)(0)); // For some reason GL_INT dont work
+    rlSetVertexAttributeDivisor(2, 1);
     rlDisableVertexArray();
 
     int shader_mvp_loc = GetShaderLocation(shader_grid_bg, "mvp");
@@ -210,7 +207,6 @@ int main(void) {
     }
 
     rlEnableShader(shader_grid_bg.id);
-    rlBindShaderBuffer(grid_ssbo, 4);
     int grid_width = GRID_WIDTH;
     rlSetUniform(shader_grid_width_loc, &grid_width, RL_SHADER_UNIFORM_INT, 1);
     rlSetUniform(shader_material_colors_loc, material_colors, RL_SHADER_UNIFORM_VEC4, MATERIALS_COUNT);
@@ -286,7 +282,7 @@ int main(void) {
         //    mtx_lock(&game_mutex);
         //    //game_place(game, SAND, grid_pos.x, grid_pos.y, 50, 20, true);
         //    game_place(game, current_material, grid_pos.x, grid_pos.y, 10, 20, true);
-        //    rlUpdateShaderBuffer(grid_ssbo, game->grid, GRID_SIZE * sizeof(game->grid[0]), 0);
+        //    shared_game_place_data.update_maertial_vbo = true;
         //    mtx_unlock(&game_mutex);
         //}
 
@@ -294,9 +290,9 @@ int main(void) {
 
         ClearBackground((Color){ 30, 30, 30, 255 });
 
-        if(shared_game_place_data.update_ssbo){
-            rlUpdateShaderBuffer(grid_ssbo, game->grid, GRID_SIZE * sizeof(game->grid[0]), 0);
-            shared_game_place_data.update_ssbo = false;
+        if(shared_game_place_data.update_maertial_vbo){
+            rlUpdateVertexBuffer(grid_material_vbo, game->grid, GRID_SIZE * sizeof(game->grid[0]), 0);
+            shared_game_place_data.update_maertial_vbo = false;
         }
 
         Matrix model_view = GetCameraMatrix2D(camera);
@@ -324,6 +320,16 @@ int main(void) {
 
         EndDrawing();
     }
+
+    int res;
+    thrd_join(game_thread, &res);
+    mtx_destroy(&game_mutex);
+
+    rlUnloadVertexArray(quad_vao);
+    rlUnloadVertexBuffer(quad_vbo);
+    rlUnloadVertexBuffer(quad_ebo);
+
+    arena_free(arena);
 
     CloseWindow();
 

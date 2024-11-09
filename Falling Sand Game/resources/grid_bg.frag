@@ -1,4 +1,4 @@
-#version 430
+#version 330
 
 in vec2 frag_tex_coord;
 in vec4 frag_color;
