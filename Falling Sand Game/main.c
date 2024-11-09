@@ -22,26 +22,20 @@ typedef struct {
     mouse_button_t left, middle, right;
 } mouse_t;
 
-Rectangle grid[GRID_SIZE] = { 0 };
-
 typedef struct Vector2i{
     int x, y;
 } Vector2i;
-Vector2 Vec2iToVec2(Vector2i v) {
+Vector2 vec2i_to_vec2(Vector2i v) {
     return (Vector2){(float)v.x, (float)v.y};
 }
-Vector2i Vec2ToVec2i(Vector2 v) {
+Vector2i vec2_to_vec2i(Vector2 v) {
     return (Vector2i){(int)v.x, (int)v.y};
 }
 
 Vector2i world_to_grid(Vector2 pos, Vector2 grid_start, float grid_cell_size) {
     Vector2 out = Vector2Subtract(pos, grid_start);
     out = Vector2Scale(out, 1.f / grid_cell_size);
-    return Vec2ToVec2i(out);
-}
-
-Color rgba_to_color(rgba_t rgba) {
-    return (Color){ rgba.r, rgba.g, rgba.b, rgba.a };
+    return vec2_to_vec2i(out);
 }
 
 #define GRID_CELL_SIZE 10.f
@@ -53,8 +47,8 @@ typedef struct {
     atomic_Vector2 mouse_pos_world;
     atomic_long simulation_interval;
     atomic_material_type_e_t current_material;
-    atomic_bool update_maertial_vbo;
     atomic_bool place;
+    atomic_bool tick;
 } shared_game_place_data_t;
 shared_game_place_data_t shared_game_place_data;
 
@@ -79,13 +73,12 @@ int thread_game_simulate(void* arg) {
             Vector2i grid_pos = world_to_grid(shared_game_place_data.mouse_pos_world, shared_game_place_data.grid_start, GRID_CELL_SIZE);
             //game_place(game, SAND, grid_pos.x, grid_pos.y, 50, 20, true);
             game_place(game, shared_game_place_data.current_material, grid_pos.x, grid_pos.y, 10, 20, true);
-            shared_game_place_data.update_maertial_vbo = true;
             shared_game_place_data.place = false;
         }
 
-        if(!IsKeyDown(KEY_SPACE)) {
+        if(shared_game_place_data.tick) {
             game_tick(game);
-            shared_game_place_data.update_maertial_vbo = true;
+            shared_game_place_data.tick = false;
         }
 
         end_time = get_curr_time();
@@ -139,21 +132,17 @@ int main(void) {
 
     Vector2 grid_start = {-GRID_WIDTH / 2.f, -GRID_HEIGHT / 2.f};
     grid_start = Vector2Scale(grid_start, GRID_CELL_SIZE);
-    for (int i = 0; i < GRID_SIZE; i++){
-        grid[i].width = GRID_CELL_SIZE;
-    	grid[i].height = GRID_CELL_SIZE;
-        int y = i / GRID_WIDTH;
-        int x = i - y * GRID_WIDTH;
-        grid[i].x = grid_start.x + x * GRID_CELL_SIZE;
-        grid[i].y = grid_start.y + y * GRID_CELL_SIZE;
-    }
+
+    Vector2 move_bounds_offset = {100.f, 100.f};
+    Rectangle move_bounds = {grid_start.x - move_bounds_offset.x, grid_start.y - move_bounds_offset.y,
+    	GRID_WIDTH * GRID_CELL_SIZE + move_bounds_offset.x * 2, GRID_HEIGHT * GRID_CELL_SIZE + move_bounds_offset.y * 2};
 
     shared_game_place_data.current_material = SAND;
     shared_game_place_data.simulation_interval = 1000000000L / 60;
     shared_game_place_data.grid_start = grid_start;
     shared_game_place_data.mouse_pos_world = (Vector2){0, 0};
-    shared_game_place_data.update_maertial_vbo = true;
     shared_game_place_data.place = false;
+    shared_game_place_data.tick = true;
 
     float grid_outline_thickness = 5 * GRID_CELL_SIZE;
     Rectangle grid_outline;
@@ -168,20 +157,15 @@ int main(void) {
 
     float vertices[] = {
         // Positions         Texcoords
-        1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
-        1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f, 1.0f,
-        0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+        1.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+        1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+        0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
     };
-    //unsigned int indices[] = {
-    //    0, 1, 2,
-    //    0, 2, 3
-    //};
-    unsigned int quad_vao, quad_vbo, quad_ebo, grid_material_vbo;
+    unsigned int quad_vao, quad_vbo, grid_material_vbo;
     quad_vao = rlLoadVertexArray();
     rlEnableVertexArray(quad_vao);
     quad_vbo = rlLoadVertexBuffer(vertices, sizeof(vertices), false);
-    //quad_ebo = rlLoadVertexBufferElement(indices, sizeof(indices), false);
     rlEnableVertexAttribute(0);
     rlSetVertexAttribute(0, 3, RL_FLOAT, false, 5*sizeof(float), (void*)0);
 	rlEnableVertexAttribute(1);
@@ -235,12 +219,7 @@ int main(void) {
         Vector2 mouse_world_pre_zoom = GetScreenToWorld2D(mouse.pos, camera);
 
         camera.zoom += GetMouseWheelMove() * 0.035f;
-        if(camera.zoom < 0.05f) {
-            camera.zoom = 0.05f;
-        }
-        if(camera.zoom > 5.0f) {
-            camera.zoom = 5.0f;
-        }
+        camera.zoom = Clamp(camera.zoom, 0.075f, 5.0f);
 
         Vector2 zoom_offset = Vector2Subtract(mouse_world_pre_zoom, GetScreenToWorld2D(mouse.pos, camera));
         camera.target = Vector2Add(camera.target, zoom_offset);
@@ -258,6 +237,9 @@ int main(void) {
             camera.target = Vector2Add(camera.target, mouse_delta);
             last_mouse_pos = mouse.pos;
         }
+        camera.target.x = Clamp(camera.target.x, move_bounds.x, move_bounds.x + move_bounds.width);
+        camera.target.y = Clamp(camera.target.y, move_bounds.y, move_bounds.y + move_bounds.height);
+
         if (mouse.left.down) {
             shared_game_place_data.mouse_pos_world = mouse.pos_world;
             shared_game_place_data.place = true;
@@ -279,27 +261,22 @@ int main(void) {
             ToggleBorderlessWindowed();
         }
 
+        if(!IsKeyDown(KEY_SPACE)) {
+            shared_game_place_data.tick = true;
+        }
+        if(IsKeyPressed(KEY_RIGHT)) {
+            shared_game_place_data.tick = true;
+        }
 
-        //if(mouse.left.down) {
-        //    Vector2i grid_pos = world_to_grid(mouse.pos_world, grid_start, GRID_CELL_SIZE);
-        //    mtx_lock(&game_mutex);
-        //    //game_place(game, SAND, grid_pos.x, grid_pos.y, 50, 20, true);
-        //    game_place(game, current_material, grid_pos.x, grid_pos.y, 10, 20, true);
-        //    shared_game_place_data.update_maertial_vbo = true;
-        //    mtx_unlock(&game_mutex);
-        //}
 
         BeginDrawing();
 
         ClearBackground((Color){ 30, 30, 30, 255 });
 
-        if(shared_game_place_data.update_maertial_vbo){
-            //rlUpdateVertexBuffer(grid_material_vbo, game->grid, GRID_SIZE * sizeof(game->grid[0]), 0);
-            glBindBuffer(GL_ARRAY_BUFFER, grid_material_vbo);
-            glBufferData(GL_ARRAY_BUFFER, GRID_SIZE * sizeof(game->grid[0]), NULL, GL_STREAM_DRAW); // orphan buffer
-            glBufferSubData(GL_ARRAY_BUFFER, 0, GRID_SIZE * sizeof(game->grid[0]), game->grid);
-            shared_game_place_data.update_maertial_vbo = false;
-        }
+        //rlUpdateVertexBuffer(grid_material_vbo, game->grid, GRID_SIZE * sizeof(game->grid[0]), 0);
+        glBindBuffer(GL_ARRAY_BUFFER, grid_material_vbo);
+        glBufferData(GL_ARRAY_BUFFER, GRID_SIZE * sizeof(game->grid[0]), NULL, GL_STREAM_DRAW); // orphan buffer
+        glBufferSubData(GL_ARRAY_BUFFER, 0, GRID_SIZE * sizeof(game->grid[0]), game->grid);
 
         Matrix model_view = GetCameraMatrix2D(camera);
         Matrix projection = MatrixOrtho(0, screen.x, screen.y, 0, -1.f, 1.f);
@@ -309,7 +286,6 @@ int main(void) {
         rlSetUniformMatrix(shader_mvp_loc, mvp);
         rlEnableVertexArray(quad_vao);
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, GRID_SIZE);
-        //glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, GRID_SIZE);
         rlDisableVertexArray();
 
         BeginMode2D(camera);
@@ -334,7 +310,7 @@ int main(void) {
 
     rlUnloadVertexArray(quad_vao);
     rlUnloadVertexBuffer(quad_vbo);
-    //rlUnloadVertexBuffer(quad_ebo);
+    rlUnloadVertexBuffer(grid_material_vbo);
 
     arena_free(arena);
 
