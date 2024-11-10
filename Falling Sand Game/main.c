@@ -13,6 +13,8 @@
 
 #include "game.h"
 
+//#define SEPARATE_GAME_THREAD
+
 typedef struct {
     uint8_t press : 1, release : 1, down : 1;
 } mouse_button_t;
@@ -62,6 +64,7 @@ struct timespec get_curr_time(void) {
     return current_time;
 }
 
+#ifdef SEPARATE_GAME_THREAD
 int thread_game_simulate(void* arg) {
     long duration;
     struct timespec start_time, end_time, duration_time;
@@ -73,6 +76,7 @@ int thread_game_simulate(void* arg) {
             Vector2i grid_pos = world_to_grid(shared_game_place_data.mouse_pos_world, shared_game_place_data.grid_start, GRID_CELL_SIZE);
             //game_place(game, SAND, grid_pos.x, grid_pos.y, 50, 20, true);
             game_place(game, shared_game_place_data.current_material, grid_pos.x, grid_pos.y, 10, 20, true);
+            //game_place(game, shared_game_place_data.current_material, grid_pos.x, grid_pos.y, 2, 0, false);
             shared_game_place_data.place = false;
         }
 
@@ -83,18 +87,21 @@ int thread_game_simulate(void* arg) {
 
         end_time = get_curr_time();
         duration = (end_time.tv_sec - start_time.tv_sec) * 1000000000L - start_time.tv_nsec + end_time.tv_nsec;
+
         if(duration > shared_game_place_data.simulation_interval) {
             duration = 0;
         }else {
             duration = shared_game_place_data.simulation_interval - duration;
         }
         duration_time = (struct timespec){ 0, duration };
+
         mtx_unlock(&game_mutex);
 
         thrd_sleep(&duration_time, NULL);
     }
     return 0;
 }
+#endif
 
 void matrix_print(Matrix mat){
     printf("%f %f %f %f\n", mat.m0, mat.m4, mat.m8, mat.m12);
@@ -198,9 +205,11 @@ int main(void) {
     rlSetUniform(shader_grid_width_loc, &grid_width, RL_SHADER_UNIFORM_INT, 1);
     rlSetUniform(shader_material_colors_loc, material_colors, RL_SHADER_UNIFORM_VEC4, MATERIALS_COUNT);
 
+#ifdef SEPARATE_GAME_THREAD
     mtx_init(&game_mutex, mtx_plain);
     thrd_t game_thread;
     thrd_create(&game_thread, thread_game_simulate, NULL);
+#endif
 
     SetTargetFPS(60);
     
@@ -246,16 +255,12 @@ int main(void) {
         }
 
         if(IsKeyPressed(KEY_DOWN)) {
-            //mtx_lock(&game_mutex);
             shared_game_place_data.current_material--;
             shared_game_place_data.current_material = clampi(shared_game_place_data.current_material, 0, MATERIALS_COUNT - 1);
-            //mtx_unlock(&game_mutex);
         }
         if(IsKeyPressed(KEY_UP)) {
-            //mtx_lock(&game_mutex);
             shared_game_place_data.current_material++;
             shared_game_place_data.current_material = clampi(shared_game_place_data.current_material, 0, MATERIALS_COUNT - 1);
-            //mtx_unlock(&game_mutex);
         }
         if (IsKeyPressed(KEY_F11)){
             ToggleBorderlessWindowed();
@@ -267,7 +272,20 @@ int main(void) {
         if(IsKeyPressed(KEY_RIGHT)) {
             shared_game_place_data.tick = true;
         }
+#ifndef SEPARATE_GAME_THREAD
+        if(shared_game_place_data.place) {
+            Vector2i grid_pos = world_to_grid(shared_game_place_data.mouse_pos_world, shared_game_place_data.grid_start, GRID_CELL_SIZE);
+            //game_place(game, SAND, grid_pos.x, grid_pos.y, 50, 20, true);
+            game_place(game, shared_game_place_data.current_material, grid_pos.x, grid_pos.y, 100, 20, true);
+            //game_place(game, shared_game_place_data.current_material, grid_pos.x, grid_pos.y, 2, 0, false);
+            shared_game_place_data.place = false;
+        }
 
+        if(shared_game_place_data.tick) {
+            game_tick(game);
+            shared_game_place_data.tick = false;
+        }
+#endif
 
         BeginDrawing();
 
@@ -304,9 +322,11 @@ int main(void) {
         EndDrawing();
     }
 
+#ifdef SEPARATE_GAME_THREAD
     int res;
     thrd_join(game_thread, &res);
     mtx_destroy(&game_mutex);
+#endif
 
     rlUnloadVertexArray(quad_vao);
     rlUnloadVertexBuffer(quad_vbo);

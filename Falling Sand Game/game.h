@@ -8,8 +8,8 @@
 #include "include/arena.h"
 #include "include/rand_xorshift.h"
 
-#define GRID_WIDTH 1024
-#define GRID_HEIGHT 1024
+#define GRID_WIDTH 1000
+#define GRID_HEIGHT 1000
 #define GRID_SIZE (GRID_WIDTH * GRID_HEIGHT)
 
 typedef enum {
@@ -59,6 +59,7 @@ typedef struct {
 	bitset_t updated_cells_bitset[BITSET_SIZE_ARRAY(GRID_SIZE)];
 	arena_t* arena;
 	xorshift32_state rand_state;
+	float gravity;
 } fsgame_t; // falling_sand_game_t
 
 
