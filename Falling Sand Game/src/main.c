@@ -14,7 +14,7 @@
 #define STB_INCLUDE_LINE_GLSL
 #include "../include/stb_include.h"
 
-#include "game.h"
+#include "simulation.h"
 
 //#define SEPARATE_GAME_THREAD
 
@@ -60,7 +60,7 @@ typedef struct {
 } shared_game_place_data_t;
 shared_game_place_data_t shared_game_place_data;
 
-fsgame_t* game;
+simulation_t* sim;
 mtx_t game_mutex;
 atomic_bool app_running = true;
 
@@ -172,8 +172,8 @@ int main(void) {
     Shader shader_grid_bg = load_rl_shader_multiple_files("resources/shaders/grid_bg.vert", "resources/shaders/grid_bg.frag", "resources/shaders");
 
     arena_t* arena = arena_new();
-    game = game_new(arena);
-    game_init(game);
+    sim = simulation_new(arena);
+    simulation_init(sim);
 
     Vector2 pos = {0, 0};
     Vector2 last_mouse_pos = { 0.0f, 0.0f };
@@ -192,7 +192,7 @@ int main(void) {
     Rectangle move_bounds = {grid_start.x - move_bounds_offset.x, grid_start.y - move_bounds_offset.y,
     	GRID_WIDTH * GRID_CELL_SIZE + move_bounds_offset.x * 2, GRID_HEIGHT * GRID_CELL_SIZE + move_bounds_offset.y * 2};
 
-    shared_game_place_data.current_material = SAND;
+    shared_game_place_data.current_material = MAT_SAND;
     shared_game_place_data.simulation_interval = 1000000000L / 60;
     shared_game_place_data.grid_start = grid_start;
     shared_game_place_data.mouse_pos_world = (Vector2){0, 0};
@@ -233,18 +233,18 @@ int main(void) {
 	rlEnableVertexAttribute(1);
     rlSetVertexAttribute(1, 2, RL_FLOAT, false, 5*sizeof(float), (void *)(3*sizeof(float)));
     //grid_material_vbo = rlLoadVertexBuffer(game->grid, GRID_SIZE * sizeof(game->grid[0]), false);
-    grid_material_vbo = glLoadVertexBuffer(game->grid, GRID_SIZE * sizeof(game->grid[0]), GL_STREAM_DRAW);
+    grid_material_vbo = glLoadVertexBuffer(sim->grid, GRID_SIZE * sizeof(sim->grid[0]), GL_STREAM_DRAW);
     rlEnableVertexAttribute(2);
     glVertexAttribIPointer(2, 1, GL_INT, 1*sizeof(int), (void *)(0));
     rlSetVertexAttributeDivisor(2, 1);
-    grid_temperature_vbo = glLoadVertexBuffer(game->temperatures, GRID_SIZE * sizeof(game->temperatures[0]), GL_STREAM_DRAW);
-    rlEnableVertexAttribute(3);
-    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 1*sizeof(float), (void *)(0));
-    rlSetVertexAttributeDivisor(3, 1);
-    grid_flag_vbo = glLoadVertexBuffer(game->flags, GRID_SIZE * sizeof(game->flags[0]), GL_STREAM_DRAW);
-    rlEnableVertexAttribute(4);
-    glVertexAttribIPointer(4, 1, GL_INT, 1*sizeof(int), (void *)(0));
-    rlSetVertexAttributeDivisor(4, 1);
+    //grid_temperature_vbo = glLoadVertexBuffer(sim->temperatures, GRID_SIZE * sizeof(sim->temperatures[0]), GL_STREAM_DRAW);
+    //rlEnableVertexAttribute(3);
+    //glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 1*sizeof(float), (void *)(0));
+    //rlSetVertexAttributeDivisor(3, 1);
+    //grid_flag_vbo = glLoadVertexBuffer(sim->flags, GRID_SIZE * sizeof(sim->flags[0]), GL_STREAM_DRAW);
+    //rlEnableVertexAttribute(4);
+    //glVertexAttribIPointer(4, 1, GL_INT, 1*sizeof(int), (void *)(0));
+    //rlSetVertexAttributeDivisor(4, 1);
     //grid_y_offsets_vbo = glLoadVertexBuffer(grid_xy_offsets, sizeof(grid_xy_offsets), GL_STREAM_DRAW);
     //rlEnableVertexAttribute(5);
     //glVertexAttribPointer(5, 2, GL_FLOAT, GL_FALSE, 2*sizeof(float), (void*)0);
@@ -256,9 +256,9 @@ int main(void) {
     int shader_material_colors_loc = rlGetLocationUniform(shader_grid_bg.id, "material_colors");
     int shader_grid_sizes_loc = rlGetLocationUniform(shader_grid_bg.id, "grid_size");
 
-    Vector4* material_colors = arena_alloc(arena, sizeof(Vector4) * MATERIALS_COUNT);
+    Vector4* material_colors = arena_alloc(arena, sizeof(Vector4) * MATERIALS_COUNT); // because dont create this on the stack
     for(int i = 0; i < MATERIALS_COUNT; i++) {
-        rgba_t col = game->materials[i].color;
+        rgba_t col = sim->materials[i].color;
         material_colors[i].x = col.r / 255.f;
         material_colors[i].y = col.g / 255.f;
     	material_colors[i].z = col.b / 255.f;
@@ -317,9 +317,9 @@ int main(void) {
         if(IsKeyDown(KEY_LEFT_ALT)) {
             can_zoom = false;
             shared_game_place_data.current_material += mouse.d_wheel;
-            shared_game_place_data.current_material = clampi(shared_game_place_data.current_material, AIR, MATERIALS_COUNT - 1);
+            shared_game_place_data.current_material = clampi(shared_game_place_data.current_material, MAT_AIR, MATERIALS_COUNT - 1);
             if((int)mouse.d_wheel != 0) {
-                printf("Material chosen: %s\n", MATERIAL_ENUM_STRING[shared_game_place_data.current_material]);
+                printf("Material chosen: %s\n", MATERIAL_NAMES_STRING[shared_game_place_data.current_material]);
             }
         }
     	if(can_zoom) {
@@ -354,12 +354,12 @@ int main(void) {
         if(IsKeyPressed(KEY_DOWN)) {
             shared_game_place_data.current_material--;
             shared_game_place_data.current_material = clampi(shared_game_place_data.current_material, 0, MATERIALS_COUNT - 1);
-            printf("Material chosen: %s\n", MATERIAL_ENUM_STRING[shared_game_place_data.current_material]);
+            printf("Material chosen: %s\n", MATERIAL_NAMES_STRING[shared_game_place_data.current_material]);
         }
         if(IsKeyPressed(KEY_UP)) {
             shared_game_place_data.current_material++;
             shared_game_place_data.current_material = clampi(shared_game_place_data.current_material, 0, MATERIALS_COUNT - 1);
-            printf("Material chosen: %s\n", MATERIAL_ENUM_STRING[shared_game_place_data.current_material]);
+            printf("Material chosen: %s\n", MATERIAL_NAMES_STRING[shared_game_place_data.current_material]);
         }
         if (IsKeyPressed(KEY_F11)){
             ToggleBorderlessWindowed();
@@ -375,13 +375,13 @@ int main(void) {
         if(shared_game_place_data.place) {
             Vector2i grid_pos = world_to_grid(shared_game_place_data.mouse_pos_world, shared_game_place_data.grid_start, GRID_CELL_SIZE);
             //game_place(game, SAND, grid_pos.x, grid_pos.y, 50, 20, true);
-            game_place(game, shared_game_place_data.current_material, grid_pos.x, grid_pos.y, shared_game_place_data.place_size, shared_game_place_data.scatter_size, true);
+            simulation_place(sim, shared_game_place_data.current_material, grid_pos.x, grid_pos.y, shared_game_place_data.place_size, shared_game_place_data.scatter_size, true);
             //game_place(game, shared_game_place_data.current_material, grid_pos.x, grid_pos.y, 2, 0, false);
             shared_game_place_data.place = false;
         }
 
         if(shared_game_place_data.tick) {
-            game_tick(game);
+            simulation_tick(sim);
             shared_game_place_data.tick = false;
         }
 #endif
@@ -390,9 +390,9 @@ int main(void) {
 
         ClearBackground((Color){ 30, 30, 30, 255 });
 
-        glUpdateVertexBuffer(grid_material_vbo, game->grid, GRID_SIZE * sizeof(game->grid[0]), GL_STREAM_DRAW);
-        glUpdateVertexBuffer(grid_temperature_vbo, game->temperatures, GRID_SIZE * sizeof(game->temperatures[0]), GL_STREAM_DRAW);
-        glUpdateVertexBuffer(grid_flag_vbo, game->flags, GRID_SIZE * sizeof(game->flags[0]), GL_STREAM_DRAW);
+        glUpdateVertexBuffer(grid_material_vbo, sim->grid, GRID_SIZE * sizeof(sim->grid[0]), GL_STREAM_DRAW);
+        //glUpdateVertexBuffer(grid_temperature_vbo, sim->temperatures, GRID_SIZE * sizeof(game->temperatures[0]), GL_STREAM_DRAW);
+        //glUpdateVertexBuffer(grid_flag_vbo, sim->flags, GRID_SIZE * sizeof(sim->flags[0]), GL_STREAM_DRAW);
 
         Matrix model_view = GetCameraMatrix2D(camera);
         Matrix projection = MatrixOrtho(0, screen.x, screen.y, 0, -1.f, 1.f);

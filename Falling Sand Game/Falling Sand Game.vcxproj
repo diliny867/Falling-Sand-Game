@@ -124,6 +124,11 @@
       <AdditionalDependencies>raylib.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
+    <PreBuildEvent>
+      <Command>cd "$(ProjectDir)resources" &amp;&amp; python gen_ALL_MATERIALS_h.py
+</Command>
+      <Message>Generating ALL_MATERIALS.h</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -147,21 +152,45 @@
       <AdditionalDependencies>raylib.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
+    <PreBuildEvent>
+      <Command>cd "$(ProjectDir)resources" &amp;&amp; python gen_ALL_MATERIALS_h.py
+</Command>
+      <Message>Generating ALL_MATERIALS.h</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="include\arena.c" />
     <ClCompile Include="include\bitset.c" />
     <ClCompile Include="src\game.c" />
     <ClCompile Include="src\main.c" />
+    <ClCompile Include="src\materials_common.c" />
+    <ClCompile Include="src\simulation.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\arena.h" />
     <ClInclude Include="include\bitset.h" />
     <ClInclude Include="include\rand_xorshift.h" />
     <ClInclude Include="include\xorshift.h" />
+    <ClInclude Include="resources\ALL_MATERIALS.h" />
     <ClInclude Include="resources\glsl_common.h" />
+    <ClInclude Include="resources\materials\AIR.h" />
+    <ClInclude Include="resources\materials\CONCRETE.h" />
+    <ClInclude Include="resources\materials\FIRE.h" />
+    <ClInclude Include="resources\materials\ICE.h" />
+    <ClInclude Include="resources\materials\ROCK.h" />
+    <ClInclude Include="resources\materials\SAND.h" />
+    <ClInclude Include="resources\materials\STEAM.h" />
+    <ClInclude Include="resources\materials\WATER.h" />
+    <ClInclude Include="resources\materials\WOOD.h" />
     <ClInclude Include="src\common.h" />
     <ClInclude Include="src\game.h" />
+    <ClInclude Include="src\materials_common.h" />
+    <ClInclude Include="src\simulation.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="resources\gen_ALL_MATERIALS_h.py" />
+    <None Include="resources\shaders\grid_bg.frag" />
+    <None Include="resources\shaders\grid_bg.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

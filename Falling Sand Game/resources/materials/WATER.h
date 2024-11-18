@@ -2,21 +2,32 @@
 
 #include "../../src/materials_common.h"
 
+static void tick_WATER(MATERIAL_TICK_FUNC_ARGS) {
 
-material_t init_WATER(void){
+}
+
+inline material_t init_WATER(void){
     material_t mat;
 	ZERO_OUT_VAR(mat);
 
     mat.name = "WATER";
     mat.color = (rgba_t){98, 179, 222, 255};
 	mat.death_chance = 0;
-	mat.density = DENSITY_MAX * 0.3f;
+	mat.mass = DENSITY_MAX * 0.3f;
 	mat.viscosity = 0.35f;
 	mat.advesity = 0.8f;
 	mat.flags = LIQUID;
 	mat.flamable = false;
 	mat.meltable = false;
 	mat.flaming = false;
+
+	mat.aim_temp = ROOM_TEMP;
+	mat.conversions.temperature.low = ZERO_TEMP;
+	mat.conversions.temperature.low_conversion = MAT_ICE;
+	mat.conversions.temperature.high = ZERO_TEMP + 100.f;
+	mat.conversions.temperature.high = MAT_STEAM;
+
+	mat.tick = tick_WATER;
 
     return mat;
 }

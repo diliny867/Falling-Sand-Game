@@ -1,12 +1,13 @@
 #pragma once
 
 #include <stdint.h>
+#include <stdbool.h>
 
-typedef float float32_t;
-typedef double float64_t;
+//typedef float float32_t;
+//typedef double float64_t;
 
 
-#define force_inline __forceinline inline
+#define force_inline __forceinline
 
 force_inline int clampi(int val, int min, int max) {
 	if(val < min) {
@@ -18,4 +19,10 @@ force_inline int clampi(int val, int min, int max) {
 	return val;
 }
 
-#define sign(x) ((x > 0) - (x < 0))
+#define sign(x) (((x) > 0) - ((x) < 0))
+force_inline int signi(int x) {
+	return (x > 0) - (x < 0);
+}
+force_inline int signf(float x) {
+	return (x > 0) - (x < 0);
+}

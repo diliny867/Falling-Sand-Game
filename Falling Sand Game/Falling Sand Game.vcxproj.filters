@@ -13,6 +13,12 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Resource Files\materials">
+      <UniqueIdentifier>{13ade1fc-588f-43f9-8115-5c0667feb051}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files\shaders">
+      <UniqueIdentifier>{c91c858c-bdc0-411a-beb1-20fce0d3a423}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="include\arena.c">
@@ -25,6 +31,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\main.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\simulation.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\materials_common.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -50,5 +62,52 @@
     <ClInclude Include="src\game.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\materials_common.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\simulation.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="resources\ALL_MATERIALS.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="resources\materials\AIR.h">
+      <Filter>Resource Files\materials</Filter>
+    </ClInclude>
+    <ClInclude Include="resources\materials\CONCRETE.h">
+      <Filter>Resource Files\materials</Filter>
+    </ClInclude>
+    <ClInclude Include="resources\materials\FIRE.h">
+      <Filter>Resource Files\materials</Filter>
+    </ClInclude>
+    <ClInclude Include="resources\materials\ROCK.h">
+      <Filter>Resource Files\materials</Filter>
+    </ClInclude>
+    <ClInclude Include="resources\materials\SAND.h">
+      <Filter>Resource Files\materials</Filter>
+    </ClInclude>
+    <ClInclude Include="resources\materials\WATER.h">
+      <Filter>Resource Files\materials</Filter>
+    </ClInclude>
+    <ClInclude Include="resources\materials\WOOD.h">
+      <Filter>Resource Files\materials</Filter>
+    </ClInclude>
+    <ClInclude Include="resources\materials\STEAM.h">
+      <Filter>Resource Files\materials</Filter>
+    </ClInclude>
+    <ClInclude Include="resources\materials\ICE.h">
+      <Filter>Resource Files\materials</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="resources\shaders\grid_bg.frag">
+      <Filter>Resource Files\shaders</Filter>
+    </None>
+    <None Include="resources\shaders\grid_bg.vert">
+      <Filter>Resource Files\shaders</Filter>
+    </None>
+    <None Include="resources\gen_ALL_MATERIALS_h.py">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

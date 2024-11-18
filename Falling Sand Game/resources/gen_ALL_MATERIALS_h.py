@@ -1,3 +1,5 @@
+#The script will be auto run by Visual Studio on each compilation
+
 import os
 
 file_name = "ALL_MATERIALS.h"
