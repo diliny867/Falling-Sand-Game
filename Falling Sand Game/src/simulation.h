@@ -33,7 +33,7 @@
 //#define GRID_INDEX_GET_X(index) (index) % GRID_WIDTH
 #define GRID_INDEX_GET_XY(index, x, y) (y) = (index) / GRID_WIDTH; (x) = (index) - (y) * GRID_WIDTH
 
-// Outer bounds remove particles, TODO: implement 
+// Outer bounds do/dont stop particles, TODO: implement 
 #define BOUNDS_PASS_THROUGH
 
 
@@ -72,6 +72,7 @@ typedef struct simulation_t {
 	//float gravity_map[GRID_CELLS_SIZE];
 	float gravity;
 	float air_drag;
+	float max_v;
 	float pressure_map[GRID_CELLS_SIZE];
 	xy_t velocity_map[GRID_CELLS_SIZE];
 } simulation_t;
@@ -85,4 +86,4 @@ void simulation_tick(simulation_t* sim);
 
 void simulation_place(simulation_t* sim, material_type_e_t material, int x, int y, int size, int scatter, bool round);
 
-void simulation_delete(simulation_t* sim);
+void simulation_free(simulation_t* sim);

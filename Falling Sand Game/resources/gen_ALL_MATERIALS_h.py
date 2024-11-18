@@ -1,4 +1,4 @@
-#The script will be auto run by Visual Studio on each compilation
+#This script will be auto run by Visual Studio before each compilation
 
 import os
 
