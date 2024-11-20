@@ -49,11 +49,13 @@ typedef struct {
 	float advesity; //how it spreads to on x axis (0 - does not spread, 1 - spreads the same as on y)
 	float aim_temp;
 	float bounciness;
+	float roundness;
 	uint8_t death_chance; // survivability chance: 0 to 255 (255 is 100%)
 	uint32_t flags;
 	bool flamable;
-	bool meltable;
 	bool flaming;
+	bool meltable;
+	bool melting;
 	struct {
 		mat_conversion_t temperature;
 		mat_conversion_t pressure;

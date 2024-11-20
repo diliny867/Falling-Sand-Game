@@ -49,12 +49,26 @@ typedef enum {
 	COLL_CANT_MOVE = 0,
 	COLL_SWAP,
 	COLL_REPLACE,
+
+	COLL_TYPE_MASK = 0x07FFFFFF,
+	COLL_FLAG_MASK = 0x78000000,
+
+	COLL_FLAG_DOWN = 1 << 27,
+	COLL_FLAG_UP = 1 << 28,
+	COLL_FLAG_LEFT = 1 << 29,
+	COLL_FLAG_RIGHT = 1 << 30, // ok, dont use the msb
 } collision_res_e_t;
+typedef collision_res_e_t coll_res_typeonly_t; // implies that flag can not also be also passed
+typedef collision_res_e_t coll_res_full_t;	   // implies that flag can also be also passed
+#define COLL_TYPE(c, v) (((c) & COLL_TYPE_MASK) == (v))
+#define COLL_FLAG(c, v) ((c) & (v))
 
 typedef struct {
-	collision_res_e_t collision;
+	coll_res_typeonly_t collision;
 	float bounce;
+	float bounce_deviation;
 } interaction_t;
+#define BOUNCE_DEVIATION_MAX 0.3f
 
 typedef struct {
 	float x, y;
@@ -72,9 +86,9 @@ typedef struct simulation_t {
 	//float gravity_map[GRID_CELLS_SIZE];
 	float gravity;
 	float air_drag;
-	float max_v;
+	float terminal_v;
 	float pressure_map[GRID_CELLS_SIZE];
-	xy_t velocity_map[GRID_CELLS_SIZE];
+	xy_t acceleration_map[GRID_CELLS_SIZE];
 } simulation_t;
 
 

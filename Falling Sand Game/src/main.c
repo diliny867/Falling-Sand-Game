@@ -196,8 +196,8 @@ int main(void) {
     shared_game_place_data.simulation_interval = 1000000000L / 60;
     shared_game_place_data.grid_start = grid_start;
     shared_game_place_data.mouse_pos_world = (Vector2){0, 0};
-    shared_game_place_data.place_size = 1;
-    shared_game_place_data.scatter_size =     0;
+    shared_game_place_data.place_size = 10;
+    shared_game_place_data.scatter_size = 20;
     shared_game_place_data.place = false;
     shared_game_place_data.tick = true;
 
