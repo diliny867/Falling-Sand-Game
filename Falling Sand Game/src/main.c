@@ -346,9 +346,14 @@ int main(void) {
         camera.target.x = Clamp(camera.target.x, move_bounds.x, move_bounds.x + move_bounds.width);
         camera.target.y = Clamp(camera.target.y, move_bounds.y, move_bounds.y + move_bounds.height);
 
+    	shared_game_place_data.mouse_pos_world = mouse.pos_world;
         if (mouse.left.down) {
-            shared_game_place_data.mouse_pos_world = mouse.pos_world;
             shared_game_place_data.place = true;
+        }
+
+        if(mouse.middle.press) {
+            Vector2i grid_pos = world_to_grid(shared_game_place_data.mouse_pos_world, shared_game_place_data.grid_start, GRID_CELL_SIZE);
+            simulation_print_cell_data(sim, grid_pos.x, grid_pos.y);
         }
 
         if(IsKeyPressed(KEY_DOWN)) {

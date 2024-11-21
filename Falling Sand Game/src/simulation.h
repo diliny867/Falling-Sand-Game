@@ -27,14 +27,14 @@
 
 #define ARRAY2D_GET_I(x, y, width) ((y) * (width) + (x))
 #define GRID_GET_I(x, y) ARRAY2D_GET_I((x), (y), GRID_WIDTH)
-#define INTERACTION_GET_I(mat1, mat2) ARRAY2D_GET_I((mat1), (mat2), MATERIALS_COUNT)
+#define INTERACTION_GET_I(mat1, mat2) ARRAY2D_GET_I((mat1), (mat2), MATERIALS_COUNT + 1)
 #define DATA_MAP_GET_I(x, y) ARRAY2D_GET_I((x) >> 2, (y) >> 2, GRID_CELLS_WIDTH)
 //#define GRID_INDEX_GET_Y(index) (index) / GRID_WIDTH
 //#define GRID_INDEX_GET_X(index) (index) % GRID_WIDTH
 #define GRID_INDEX_GET_XY(index, x, y) (y) = (index) / GRID_WIDTH; (x) = (index) - (y) * GRID_WIDTH
 
 // Outer bounds do/dont stop particles, TODO: implement 
-#define BOUNDS_PASS_THROUGH
+//#define BOUNDS_PASS_THROUGH
 
 
 typedef struct {
@@ -68,7 +68,7 @@ typedef struct {
 	float bounce;
 	float bounce_deviation;
 } interaction_t;
-#define BOUNCE_DEVIATION_MAX 0.3f
+#define BOUNCE_DEVIATION_MAX 0.5f
 
 typedef struct {
 	float x, y;
@@ -79,7 +79,7 @@ typedef struct simulation_t {
 	pdata_t particles[GRID_SIZE];
 	int index_shuffle[GRID_SIZE];
 	material_t materials[MATERIALS_COUNT];
-	interaction_t interactions[MATERIALS_COUNT * MATERIALS_COUNT];
+	interaction_t interactions[(MATERIALS_COUNT + 1) * (MATERIALS_COUNT + 1)]; //also includes interactions for out of bounds (at MATERIALS_COUNT x or y position)
 	bitset_t updated_cells_bitset[BITSET_SIZE_ARRAY(GRID_SIZE)];
 	arena_t* arena;
 	xorshift32_state rand_state;
@@ -99,5 +99,7 @@ void simulation_init(simulation_t* sim);
 void simulation_tick(simulation_t* sim);
 
 void simulation_place(simulation_t* sim, material_type_e_t material, int x, int y, int size, int scatter, bool round);
+
+void simulation_print_cell_data(simulation_t* sim, int x, int y);
 
 void simulation_free(simulation_t* sim);
