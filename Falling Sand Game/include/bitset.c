@@ -5,7 +5,7 @@
 
 
 void bitset_clear(bitset_t* bitset, size_t size) {
-	memset(bitset, 0, BITSET_SIZE_ARRAY(size) * sizeof(bitset_t));
+	memset(bitset, 0, (size) * sizeof(bitset_t));
 }
 bool bitset_get(bitset_t* bitset,size_t index) {
 	return (bitset[index / BITSET_WORD_SIZE] >> (index % BITSET_WORD_SIZE)) & 1;
@@ -72,5 +72,5 @@ bool bitset_dyn_get(bitset_t* bitset, size_t index) {
 	return bitset_get(bitset, index);
 }
 void bitset_dyn_clear(bitset_t* bitset) {
-	bitset_clear(bitset, bitset_dyn_get_capacity(bitset));
+	bitset_clear(bitset, BITSET_SIZE_ARRAY(bitset_dyn_get_capacity(bitset)));
 }

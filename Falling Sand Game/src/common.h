@@ -10,22 +10,12 @@
 #define force_inline __forceinline
 
 force_inline int clampi(int val, int min, int max) {
-	if(val < min) {
-		return min;
-	}
-	if(val > max) {
-		return max;
-	}
-	return val;
+	const int tmp = val < min ? min : val;
+	return tmp > max ? max : tmp;
 }
 force_inline float clampf(float val, float min, float max) {
-	if(val < min) {
-		return min;
-	}
-	if(val > max) {
-		return max;
-	}
-	return val;
+	const float tmp = val < min ? min : val;
+	return tmp > max ? max : tmp;
 }
 
 #define sign(x) (((x) > 0) - ((x) < 0))

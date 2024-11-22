@@ -1,5 +1,6 @@
 #include "simulation.h"
 
+#include <float.h>
 #include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
@@ -78,6 +79,9 @@ static void precompute_collisions(simulation_t* sim) {
 				mat_to = materials + mat_type_to;
 			}
 			interaction->collision = material_get_collision(mat_from, mat_to);
+			if(mat_type_from == MAT_SAND && mat_type_to == MAT_AIR) {
+				printf("AGAGSGASga%d\n", interaction->collision);
+			}
 			interaction->bounce_deviation = ((mat_from->roundness + mat_to->roundness) * 0.5f) * BOUNCE_DEVIATION_MAX;
 			interaction->bounce = mat_from->bounciness * mat_to->bounciness; // * (1.f + interaction->bounce_deviation * rand_sign(&sim->rand_state));
 		}
@@ -103,7 +107,7 @@ void simulation_init(simulation_t* sim) {
 	}
 	array_shuffle(sim->index_shuffle, GRID_SIZE, &sim->rand_state);
 
-	bitset_clear(sim->updated_cells_bitset, GRID_SIZE);
+	bitset_clear(sim->updated_cells_bitset, BITSET_SIZE_ARRAY(GRID_SIZE));
 
 	init_get_materials(sim);
 	precompute_collisions(sim);
@@ -188,6 +192,8 @@ void simulation_place(simulation_t* sim, material_type_e_t material, int x, int 
 #endif
 }
 
+int to_check_x = -1;
+int to_check_y = -1;
 void simulation_print_cell_data(simulation_t* sim, int x, int y) {
 	int index = GRID_GET_I(x, y);
 	pdata_t* pdata = sim->particles + index;
@@ -196,13 +202,18 @@ void simulation_print_cell_data(simulation_t* sim, int x, int y) {
 	printf("type: %d: %s\n", mat_type, MATERIAL_NAMES_STRING[mat_type]);
 	printf("x: %f y: %f vx: %f vy: %f\n", pdata->x, pdata->y, pdata->vx, pdata->vy);
 	printf("life: %d flags: %u\n", pdata->life, pdata->flags);
+
+	to_check_x = x;
+	to_check_y = y;
 }
 
 static force_inline coll_res_typeonly_t can_move(simulation_t* sim, material_type_e_t mat_from, int x_to, int y_to) {
 	if(outof_grid_xy(x_to, y_to)) {
 		return COLL_CANT_MOVE;
 	}
-	return sim->interactions[INTERACTION_GET_I(mat_from, sim->grid[GRID_GET_I(x_to, y_to)])].collision;
+	material_type_e_t mat2 = sim->grid[GRID_GET_I(x_to, y_to)];
+	coll_res_typeonly_t coll = sim->interactions[INTERACTION_GET_I(mat_from, mat2)].collision;
+	return coll;
 }
 //static force_inline bool cell_occupied(simulation_t* sim, int x, int y) {
 //	if(outof_grid_xy(x, y)) {
@@ -210,6 +221,10 @@ static force_inline coll_res_typeonly_t can_move(simulation_t* sim, material_typ
 //	}
 //	return sim->grid[GRID_GET_I(x, y)] != MAT_AIR;
 //}
+//#define FLT_COMPARE_ZERO(v) ((v) >= -FLT_EPSILON && (v) <= FLT_EPSILON)
+#define FLT_SIGN(f) ((*(unsigned int*)&(f))&0x80000000)
+#define OUTOF_POOL(pool, dir) (FLT_SIGN(pool) != FLT_SIGN(dir))
+#define POOL_EXTRACT(pool, dir) (OUTOF_POOL(pool, dir) * (pool))
 //#define ALWAYS_SCALE_MOVE
 static force_inline coll_res_full_t clamp_move(simulation_t* sim, material_type_e_t mat_type, float x_from, float y_from, float x_to, float y_to, float* x_res, float* y_res) {
 	if((int)x_from == (int)x_to && (int)y_from == (int)y_to) {
@@ -217,67 +232,65 @@ static force_inline coll_res_full_t clamp_move(simulation_t* sim, material_type_
 		*y_res = y_to;
 		return COLL_CANT_MOVE;
 	}
+	
 	coll_res_full_t res;
-	float delta_y = y_to - y_from;
 	float delta_x = x_to - x_from;
-	//printf("%f-%f ", delta_x, delta_y);
+	float delta_y = y_to - y_from;
+
+	// fixes adding +/-1 even when left to add is less than +/-1
+	float pool_x = delta_x;
+	float pool_y = delta_y;
 
 	float dir_y, dir_x;
-	float abs_dy = fabsf(delta_y);
 	float abs_dx = fabsf(delta_x);
+	float abs_dy = fabsf(delta_y);
 #ifdef ALWAYS_SCALE_MOVE
-	//float abs_y = fabsf(delta_y);
-	//float abs_x = fabsf(delta_x);
-	//if(abs_y >= abs_x) {
-	//	dir_y = signf(delta_y);
-	//	//dir_y = clampf(delta_y, -1.f, 1.f);
-	//	dir_x = delta_x / abs_y;
-	//}else {
-	//	dir_y = delta_y / abs_x;
-	//	dir_x = signf(delta_x);
-	//	//dir_x = clampf(delta_x, -1.f, 1.f);
-	//}
 	float inv_dmax = 1.f / fmaxf(abs_dy, abs_dx);
-	dir_y = delta_y * inv_dmax;
 	dir_x = delta_x * inv_dmax;
+	dir_y = delta_y * inv_dmax;
 #else
 	if(abs_dy > 1.f && abs_dx > 1.f) {
 		float inv_dmax = 1.f / fmaxf(abs_dy, abs_dx);
-		dir_y = delta_y * inv_dmax;
 		dir_x = delta_x * inv_dmax;
+		dir_y = delta_y * inv_dmax;
 	}else {
-		dir_y = clampf(delta_y, -1.f, 1.f);
-		dir_x = clampf(delta_x, -1.f, 1.f);
+		dir_x = delta_x;
+		dir_y = delta_y;
 	}
 #endif
 
 	do {
-		x_from += dir_x;
-		y_from += dir_y;
+		x_from += dir_x + POOL_EXTRACT(pool_x, dir_x);
+		y_from += dir_y + POOL_EXTRACT(pool_y, dir_y);
+		pool_x -= dir_x;
+		pool_y -= dir_y;
+
 		res = can_move(sim, mat_type, (int)x_from, (int)y_from);
 		if(res == COLL_CANT_MOVE) {
 			int prev_x = (int)(x_from - dir_x);
 			int prev_y = (int)(y_from - dir_y);
 			if(prev_x != (int)x_from) {
 				if(prev_x < (int)x_from) {
-					res |= COLL_FLAG_RIGHT;
+					res |= COLL_FLAG_BOUNCE_RIGHT;
 				}else {
-					res |= COLL_FLAG_LEFT;
+					res |= COLL_FLAG_BOUNCE_LEFT;
 				}
-				if(can_move(sim, mat_type, prev_x, (int)y_from) == COLL_SWAP) {
-					*y_res = y_from;
+				if(can_move(sim, mat_type, (int)x_from, prev_y) == COLL_SWAP) {
+					*x_res = x_from;
+
 				}
 			}else {
 				*x_res = x_from;
 			}
 			if(prev_y != (int)y_from) {
 				if(prev_y < (int)y_from) {
-					res |= COLL_FLAG_DOWN;
+					res |= COLL_FLAG_BOUNCE_DOWN;
 				}else {
-					res |= COLL_FLAG_UP;
+					res |= COLL_FLAG_BOUNCE_UP;
 				}
-				if(can_move(sim, mat_type, (int)x_from, prev_y) == COLL_SWAP) {
-					*x_res = x_from;
+				if(can_move(sim, mat_type, prev_x, (int)y_from) == COLL_SWAP) {
+					*y_res = y_from;
+
 				}
 			}else {
 				*y_res = y_from;
@@ -291,6 +304,7 @@ static force_inline coll_res_full_t clamp_move(simulation_t* sim, material_type_
 			}
 		}
 	} while((int)y_from != (int)y_to && (int)x_from != (int)x_to);
+	//} while(FLT_SIGN(pool_x) != FLT_SIGN(dir_x) || FLT_SIGN(pool_y) != FLT_SIGN(dir_y));
 	return res;
 }
 static force_inline void simulation_swap(simulation_t* sim, int index1, int index2) {
@@ -298,7 +312,8 @@ static force_inline void simulation_swap(simulation_t* sim, int index1, int inde
 	SWAP(material_type_e_t, sim->grid[index1], sim->grid[index2]);
 	SWAP(pdata_t, sim->particles[index1], sim->particles[index2]);
 }
-static void handle_cell(simulation_t* sim, int index/*, int x, int y*/) {
+static int a = 0;
+static force_inline void handle_cell(simulation_t* sim, int index/*, int x, int y*/) {
 	material_type_e_t* grid = sim->grid;
 	material_type_e_t mat_type = grid[index];
 	material_t* materials = sim->materials;
@@ -314,7 +329,6 @@ static void handle_cell(simulation_t* sim, int index/*, int x, int y*/) {
 	pdata->vy = clampf((pdata->vy + acceleration.y + sim->gravity), -terminal_v, terminal_v) * sim->air_drag;
 
 	coll_res_full_t coll = clamp_move(sim, mat_type, pdata->x, pdata->y, pdata->x + pdata->vx, pdata->y + pdata->vy, &pdata->x, &pdata->y);
-
 	int new_x = (int)pdata->x;
 	int new_y = (int)pdata->y;
 	if(new_x == x && new_y == y) {
@@ -326,7 +340,7 @@ static void handle_cell(simulation_t* sim, int index/*, int x, int y*/) {
 
 	interaction_t* interaction;
 	//if(new_x > x && can_move(sim, mat_type, new_x + 1, new_y) == COLL_CANT_MOVE) {
-	if(coll & COLL_FLAG_RIGHT){
+	if(coll & COLL_FLAG_BOUNCE_RIGHT){
 		switch(coll & COLL_TYPE_MASK) {
 		case COLL_CANT_MOVE:
 			pdata->x = (float)new_x + 0.5f;
@@ -345,7 +359,7 @@ static void handle_cell(simulation_t* sim, int index/*, int x, int y*/) {
 		default: NODEFAULT;
 		}
 	//}else if(new_x < x && can_move(sim, mat_type, new_x - 1, new_y) == COLL_CANT_MOVE) {
-	}else if(coll & COLL_FLAG_LEFT){
+	}else if(coll & COLL_FLAG_BOUNCE_LEFT){
 		switch(coll & COLL_TYPE_MASK) {
 		case COLL_CANT_MOVE:
 			pdata->x = (float)new_x + 0.5f;
@@ -365,7 +379,7 @@ static void handle_cell(simulation_t* sim, int index/*, int x, int y*/) {
 		}
 	}
 	//if(new_y > y && can_move(sim, mat_type, new_x, new_y + 1) == COLL_CANT_MOVE) {
-	if(coll & COLL_FLAG_DOWN){
+	if(coll & COLL_FLAG_BOUNCE_DOWN){
 		switch(coll & COLL_TYPE_MASK) {
 		case COLL_CANT_MOVE:
 			pdata->y = (float)new_y + 0.5f;
@@ -384,7 +398,7 @@ static void handle_cell(simulation_t* sim, int index/*, int x, int y*/) {
 		default: NODEFAULT;
 		}
 	//}else if(new_y < y && can_move(sim, mat_type, new_y, new_y - 1) == COLL_CANT_MOVE) {
-	}else if(coll & COLL_FLAG_UP){
+	}else if(coll & COLL_FLAG_BOUNCE_UP){
 		switch(coll & COLL_TYPE_MASK) {
 		case COLL_CANT_MOVE:
 			pdata->y = (float)new_y + 0.5f;
@@ -404,15 +418,17 @@ static void handle_cell(simulation_t* sim, int index/*, int x, int y*/) {
 		}
 	}
 
+	int new_index = GRID_GET_I(new_x, new_y);
 	if(mat->tick) {
-		mat->tick(sim, index, new_x, new_y);
+		mat->tick(sim, new_index, new_x, new_y);
 	}
 
-	int new_index = GRID_GET_I(new_x, new_y);
-	simulation_swap(sim, index, new_index);
+	sim->particles[new_index].x = x;
+	sim->particles[new_index].y = y;
+	simulation_swap(sim,index,new_index);
 }
 
-static void process_cell(simulation_t* sim, int index/*, int x, int y*/) {
+static force_inline void process_cell(simulation_t* sim, int index/*, int x, int y*/) {
 	//printf("\npre: %d %d\n", x, y);
 	//printf("x: %d, y: %d, nx: %d, ny: %d\n", x, y, new_x, new_y);
 	handle_cell(sim, index/*, x, y*/);
@@ -449,15 +465,17 @@ void simulation_tick(simulation_t* sim) {
 			if(mat_type == MAT_AIR || bitset_get(sim->updated_cells_bitset, index)) {
 				continue;
 			}
+
 			if(mat->death_chance != 0 && (/*material.death_chance == DEATH_CHANCE_MAX ||*/ mat->death_chance > xorshift32_n(&sim->rand_state, DEATH_CHANCE_MAX))) {
 				pdata = sim->particles + index;
 				simulation_replace_cell(sim, pdata->x, pdata->y, MAT_AIR);
-				bitset_set_weak(sim->updated_cells_bitset, index, mat_type != MAT_AIR);
+				//bitset_set_weak(sim->updated_cells_bitset, index, mat_type != MAT_AIR);
 				continue;
 			}
 
 			//GRID_INDEX_GET_XY(index, x, y);
 			process_cell(sim, index/*, x, y*/);
+			bitset_set(sim->updated_cells_bitset, index, 1);
 		}
 	}
 	//printf("\n");
