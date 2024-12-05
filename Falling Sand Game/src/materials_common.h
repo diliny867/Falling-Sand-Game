@@ -9,12 +9,11 @@
 #define DENSITY_MAX UINT8_MAX
 
 typedef enum {
-	NONE =      0,
-	SOLID =     1 << 0,
-	LIQUID =    1 << 1,
-	GAS =     	1 << 2,
-	STATIC = 	1 << 3,
-
+	MAT_FLAG_NONE =		0,
+	MAT_FLAG_SOLID =	1 << 0,
+	MAT_FLAG_LIQUID =	1 << 1,
+	MAT_FLAG_GAS =		1 << 2,
+	MAT_FLAG_STATIC =	1 << 3,
 } material_flag_e_t;
 
 
@@ -46,10 +45,11 @@ typedef struct {
 	rgba_t color;
 	float mass;
 	float viscosity;
-	float advesity; //how it spreads to on x axis (0 - does not spread, 1 - spreads the same as on y)
+	float advection; //how it spreads to on x axis (0 - does not spread, 1 - spreads the same as on y)
 	float aim_temp;
 	float bounciness;
 	float roundness;
+	float friction;
 	uint8_t death_chance; // survivability chance: 0 to 255 (255 is 100%)
 	uint32_t flags;
 	bool flamable;

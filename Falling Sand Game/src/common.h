@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <assert.h>
 
 //typedef float float32_t;
 //typedef double float64_t;
@@ -25,3 +26,14 @@ force_inline int signi(int x) {
 force_inline int signf(float x) {
 	return (x > 0) - (x < 0);
 }
+
+//Straight from assert.h
+#ifdef NDEBUG
+#define assert_text(expression, details) ((void)0)
+#else
+#define assert_text(expression, details) (void)(																\
+            (!!(expression)) ||																					\
+            (_wassert(_CRT_WIDE(details ## ": " ## #expression), _CRT_WIDE(__FILE__), (unsigned)(__LINE__)), 0)	\
+        )
+#endif
+

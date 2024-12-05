@@ -12,8 +12,8 @@ inline material_t init_WOOD(void){
 	mat.death_chance = 0;
 	mat.mass = DENSITY_MAX * 0.5;
 	mat.viscosity = 0;
-	mat.advesity = 0;
-	mat.flags = STATIC | SOLID;
+	mat.advection = 0;
+	mat.flags = MAT_FLAG_STATIC | MAT_FLAG_SOLID;
 	mat.flamable = true;
 	mat.meltable = false;
 	mat.flaming = false;

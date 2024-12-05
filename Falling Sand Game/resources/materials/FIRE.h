@@ -15,8 +15,8 @@ inline material_t init_FIRE(void){
 	mat.death_chance = 20;
 	mat.mass = -DENSITY_MAX * 0.1f;
 	mat.viscosity = 0;
-	mat.advesity = 0.1f;
-	mat.flags = GAS;
+	mat.advection = 0.1f;
+	mat.flags = MAT_FLAG_GAS;
 	mat.flamable = false;
 	mat.meltable = false;
 	mat.flaming = true;

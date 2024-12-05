@@ -12,10 +12,10 @@ inline material_t init_CONCRETE(void){
 	mat.death_chance = 0;
 	mat.mass = DENSITY_MAX;
 	mat.viscosity = 0;
-	mat.advesity = 0;
+	mat.advection = 0;
 	mat.bounciness = 1.f;
 	mat.roundness = 1.f;
-	mat.flags = STATIC | SOLID;
+	mat.flags = MAT_FLAG_STATIC | MAT_FLAG_SOLID;
 	mat.flamable = false;
 	mat.flaming = false;
 	mat.melting = false;

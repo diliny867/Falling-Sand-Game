@@ -15,8 +15,8 @@ inline material_t init_ICE(void){
 	mat.death_chance = 0;
 	mat.mass = DENSITY_MAX * 0.5f;
 	mat.viscosity = 0.35f;
-	mat.advesity = 0.8f;
-	mat.flags = STATIC | SOLID;
+	mat.advection = 0.8f;
+	mat.flags = MAT_FLAG_STATIC | MAT_FLAG_SOLID;
 	mat.flamable = false;
 	mat.meltable = false;
 	mat.flaming = false;

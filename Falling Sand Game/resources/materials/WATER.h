@@ -15,8 +15,8 @@ inline material_t init_WATER(void){
 	mat.death_chance = 0;
 	mat.mass = DENSITY_MAX * 0.3f;
 	mat.viscosity = 0.35f;
-	mat.advesity = 0.8f;
-	mat.flags = LIQUID;
+	mat.advection = 0.8f;
+	mat.flags = MAT_FLAG_LIQUID;
 	mat.flamable = false;
 	mat.meltable = false;
 	mat.flaming = false;

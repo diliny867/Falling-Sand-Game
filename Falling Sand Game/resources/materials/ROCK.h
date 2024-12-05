@@ -12,8 +12,8 @@ inline material_t init_ROCK(void){
 	mat.death_chance = 0;
 	mat.mass = DENSITY_MAX * 0.65;
 	mat.viscosity = 0;
-	mat.advesity = 0;
-	mat.flags = SOLID;
+	mat.advection = 0;
+	mat.flags = MAT_FLAG_SOLID;
 	mat.flamable = false;
 	mat.meltable = false;
 	mat.flaming = false;

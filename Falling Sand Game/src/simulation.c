@@ -79,20 +79,21 @@ static void precompute_collisions(simulation_t* sim) {
 				mat_to = materials + mat_type_to;
 			}
 			interaction->collision = material_get_collision(mat_from, mat_to);
-			if(mat_type_from == MAT_SAND && mat_type_to == MAT_AIR) {
-				printf("AGAGSGASga%d\n", interaction->collision);
-			}
+			//if(mat_type_from == MAT_SAND && mat_type_to == MAT_AIR) {
+			//	printf("AGAGSGASga%d\n", interaction->collision);
+			//}
 			interaction->bounce_deviation = ((mat_from->roundness + mat_to->roundness) * 0.5f) * BOUNCE_DEVIATION_MAX;
 			interaction->bounce = mat_from->bounciness * mat_to->bounciness; // * (1.f + interaction->bounce_deviation * rand_sign(&sim->rand_state));
+			interaction->friction = mat_from->friction * mat_to->friction;
 		}
 	}
 }
 void simulation_init(simulation_t* sim) {
 	sim->rand_state.a = time(NULL);
 
-	sim->gravity = 0.1f;
+	sim->gravity = 0.05f;
 	sim->air_drag = 0.95f;
-	sim->terminal_v = 1.f;
+	sim->terminal_v = 100000.f;
 
 	memset(sim->grid, 0, GRID_SIZE * sizeof(material_type_e_t));
 	memset(sim->particles, 0, GRID_SIZE * sizeof(pdata_t));
@@ -222,20 +223,21 @@ static force_inline coll_res_typeonly_t can_move(simulation_t* sim, material_typ
 //	return sim->grid[GRID_GET_I(x, y)] != MAT_AIR;
 //}
 //#define FLT_COMPARE_ZERO(v) ((v) >= -FLT_EPSILON && (v) <= FLT_EPSILON)
-#define FLT_SIGN(f) ((*(unsigned int*)&(f))&0x80000000)
-#define OUTOF_POOL(pool, dir) (FLT_SIGN(pool) != FLT_SIGN(dir))
-#define POOL_EXTRACT(pool, dir) (OUTOF_POOL(pool, dir) * (pool))
-//#define ALWAYS_SCALE_MOVE
-static force_inline coll_res_full_t clamp_move(simulation_t* sim, material_type_e_t mat_type, float x_from, float y_from, float x_to, float y_to, float* x_res, float* y_res) {
-	if((int)x_from == (int)x_to && (int)y_from == (int)y_to) {
-		*x_res = x_to;
-		*y_res = y_to;
+//#define FLT_SIGN(f) ((*(uint32_t*)&(f))&0x80000000)
+//#define OUTOF_POOL(pool, dir) (FLT_SIGN(pool) != FLT_SIGN(dir))
+//#define POOL_EXTRACT(pool, dir) (OUTOF_POOL(pool, dir) * (pool))
+//#define NEG_ONE_TO_POS_ONE(v) ((v) >= -1) && ((v) <= 1)
+#define LAST_ITER(i, max) ((i) == ((max)-1))
+#define ALWAYS_SCALE_MOVE
+static force_inline coll_res_full_t clamp_move(simulation_t* sim, material_type_e_t mat_type, float start_x, float start_y, float end_x, float end_y, float* out_x, float* out_y) { //TODO: implement friction
+	if((int)start_x == (int)end_x && (int)start_y == (int)end_y) {
+		*out_x = end_x;
+		*out_y = end_y;
 		return COLL_CANT_MOVE;
 	}
-	
-	coll_res_full_t res;
-	float delta_x = x_to - x_from;
-	float delta_y = y_to - y_from;
+
+	float delta_x = end_x - start_x;
+	float delta_y = end_y - start_y;
 
 	// fixes adding +/-1 even when left to add is less than +/-1
 	float pool_x = delta_x;
@@ -244,13 +246,14 @@ static force_inline coll_res_full_t clamp_move(simulation_t* sim, material_type_
 	float dir_y, dir_x;
 	float abs_dx = fabsf(delta_x);
 	float abs_dy = fabsf(delta_y);
+	float abs_max = fmaxf(abs_dy, abs_dx);
+	int max_iters = (int)ceilf(abs_max);
+	float inv_dmax = 1.f / abs_max;
 #ifdef ALWAYS_SCALE_MOVE
-	float inv_dmax = 1.f / fmaxf(abs_dy, abs_dx);
 	dir_x = delta_x * inv_dmax;
 	dir_y = delta_y * inv_dmax;
 #else
-	if(abs_dy > 1.f && abs_dx > 1.f) {
-		float inv_dmax = 1.f / fmaxf(abs_dy, abs_dx);
+	if(abs_dy > 1.f || abs_dx > 1.f) {
 		dir_x = delta_x * inv_dmax;
 		dir_y = delta_y * inv_dmax;
 	}else {
@@ -258,52 +261,133 @@ static force_inline coll_res_full_t clamp_move(simulation_t* sim, material_type_
 		dir_y = delta_y;
 	}
 #endif
+	assert_text(fabsf(dir_x) <= 1.f && fabsf(dir_y) <= 1.f, "Direction increment cant exceed 1");
 
+	if(abs_dy < 1.f && abs_dx < 1.f) {
+		pool_x *= inv_dmax;
+		pool_y *= inv_dmax;
+	}
+
+	coll_res_full_t res = COLL_CANT_MOVE;
+	coll_res_typeonly_t res_x, res_y;
+	int i = 0;
+	float inc_x, inc_y;
 	do {
-		x_from += dir_x + POOL_EXTRACT(pool_x, dir_x);
-		y_from += dir_y + POOL_EXTRACT(pool_y, dir_y);
-		pool_x -= dir_x;
+		//if(NEG_ONE_TO_POS_ONE(pool_y)) {
+		if(LAST_ITER(i, max_iters)) {
+			inc_y = pool_y;
+		}else {
+			inc_y = dir_y;
+		}
+		start_y += inc_y;
 		pool_y -= dir_y;
 
-		res = can_move(sim, mat_type, (int)x_from, (int)y_from);
-		if(res == COLL_CANT_MOVE) {
-			int prev_x = (int)(x_from - dir_x);
-			int prev_y = (int)(y_from - dir_y);
-			if(prev_x != (int)x_from) {
-				if(prev_x < (int)x_from) {
-					res |= COLL_FLAG_BOUNCE_RIGHT;
-				}else {
-					res |= COLL_FLAG_BOUNCE_LEFT;
-				}
-				if(can_move(sim, mat_type, (int)x_from, prev_y) == COLL_SWAP) {
-					*x_res = x_from;
-
-				}
-			}else {
-				*x_res = x_from;
-			}
-			if(prev_y != (int)y_from) {
-				if(prev_y < (int)y_from) {
+		res_y = can_move(sim, mat_type, (int)start_x, (int)start_y);
+		if(res_y == COLL_CANT_MOVE) {
+			if((int)start_y != (int)(start_y - inc_y)){ // half-assed self collision fix
+				if(inc_y >= 0.f) {
 					res |= COLL_FLAG_BOUNCE_DOWN;
-				}else {
+				} else {
 					res |= COLL_FLAG_BOUNCE_UP;
 				}
-				if(can_move(sim, mat_type, prev_x, (int)y_from) == COLL_SWAP) {
-					*y_res = y_from;
+			}
+			start_y -= inc_y;
 
+			dir_y = -dir_y;
+			pool_y = -pool_y;
+		} else {
+			*out_y = start_y;
+		}
+
+		//if(NEG_ONE_TO_POS_ONE(pool_x)) {
+		if(LAST_ITER(i, max_iters)) {
+			inc_x = pool_x;
+		}else {
+			inc_x = dir_x;
+		}
+		start_x += inc_x;
+		pool_x -= dir_x;
+
+		res_x = can_move(sim, mat_type, (int)start_x, (int)start_y);
+		if(res_x == COLL_CANT_MOVE) {
+			if((int)start_x != (int)(start_x - inc_x)){
+				if(inc_x >= 0.f) {
+					res |= COLL_FLAG_BOUNCE_RIGHT;
+				} else {
+					res |= COLL_FLAG_BOUNCE_LEFT;
 				}
-			}else {
-				*y_res = y_from;
+			}
+			start_x -= inc_x;
+
+			dir_x = -dir_x;
+			pool_x = -pool_x;
+		} else {
+			*out_x = start_x;
+		}
+
+		if((res_x | res_y) == COLL_CANT_MOVE) {
+			if(!(res & COLL_SWAP)) {
+				res = COLL_CANT_MOVE | (res & COLL_FLAG_MASK);
 			}
 			break;
 		}else {
-			*x_res = x_from;
-			*y_res = y_from;
-			if(res == COLL_REPLACE) {
+			if(res_x == COLL_REPLACE || (res_x == COLL_CANT_MOVE && res_y == COLL_REPLACE)) { // prioritise res_x
+				res = COLL_REPLACE | (res & COLL_FLAG_MASK);
 				break;
+			}else {
+				res |= COLL_SWAP;
 			}
 		}
-	} while((int)y_from != (int)y_to && (int)x_from != (int)x_to);
+	} while(++i < max_iters);
+
+	//do {
+	//	if(NEG_ONE_TO_POS_ONE(pool_x) && NEG_ONE_TO_POS_ONE(pool_y)) {
+	//		start_x += pool_x;
+	//		start_y += pool_y;
+	//	}else {
+	//		start_x += dir_x;
+	//		start_y += dir_y;
+	//	}
+	//	pool_x -= dir_x;
+	//	pool_y -= dir_y;
+
+	//	res = can_move(sim, mat_type, (int)start_x, (int)start_y);
+	//	if(res == COLL_CANT_MOVE) {
+	//		int prev_x = (int)(start_x - dir_x);
+	//		int prev_y = (int)(start_y - dir_y);
+	//		if(prev_x != (int)start_x) {
+	//			if(prev_x < (int)start_x) {
+	//				res |= COLL_FLAG_BOUNCE_RIGHT;
+	//			}else {
+	//				res |= COLL_FLAG_BOUNCE_LEFT;
+	//			}
+	//			//if(can_move(sim, mat_type, (int)x_from, prev_y) == COLL_SWAP) {
+	//			//	*x_res = x_from;
+	//			//}
+	//		}else {
+	//			*out_x = start_x;
+	//		}
+	//		if(prev_y != (int)start_y) {
+	//			if(prev_y < (int)start_y) {
+	//				res |= COLL_FLAG_BOUNCE_DOWN;
+	//			}else {
+	//				res |= COLL_FLAG_BOUNCE_UP;
+	//			}
+	//			//if(can_move(sim, mat_type, prev_x, (int)y_from) == COLL_SWAP) {
+	//			//	*y_res = y_from;
+	//			//}
+	//		}else {
+	//			*out_y = start_y;
+	//		}
+	//		break;
+	//	}else {
+	//		*out_x = start_x;
+	//		*out_y = start_y;
+	//		if(res == COLL_REPLACE) {
+	//			break;
+	//		}
+	//	}
+	//} while((int)start_y != (int)end_y && (int)start_x != (int)end_x);
 	//} while(FLT_SIGN(pool_x) != FLT_SIGN(dir_x) || FLT_SIGN(pool_y) != FLT_SIGN(dir_y));
 	return res;
 }
@@ -313,114 +397,182 @@ static force_inline void simulation_swap(simulation_t* sim, int index1, int inde
 	SWAP(pdata_t, sim->particles[index1], sim->particles[index2]);
 }
 static int a = 0;
-static force_inline void handle_cell(simulation_t* sim, int index/*, int x, int y*/) {
-	material_type_e_t* grid = sim->grid;
-	material_type_e_t mat_type = grid[index];
-	material_t* materials = sim->materials;
-	material_t* mat = materials + mat_type;
+static force_inline void move_cell(simulation_t* sim, const int index/*, int x, int y*/) {
+	const material_type_e_t* grid = sim->grid;
+	const material_type_e_t mat_type = grid[index];
+	const material_t* materials = sim->materials;
+	const material_t* mat = materials + mat_type;
 	pdata_t* pdata = sim->particles + index;
 
-	int x = (int)pdata->x;
-	int y = (int)pdata->y;
+	const int x = (int)pdata->x;
+	const int y = (int)pdata->y;
 
-	float terminal_v = sim->terminal_v;
-	xy_t acceleration = sim->acceleration_map[DATA_MAP_GET_I(x, y)];
-	pdata->vx = clampf((pdata->vx + acceleration.x), -terminal_v, terminal_v) * sim->air_drag;
-	pdata->vy = clampf((pdata->vy + acceleration.y + sim->gravity), -terminal_v, terminal_v) * sim->air_drag;
-
-	coll_res_full_t coll = clamp_move(sim, mat_type, pdata->x, pdata->y, pdata->x + pdata->vx, pdata->y + pdata->vy, &pdata->x, &pdata->y);
-	int new_x = (int)pdata->x;
-	int new_y = (int)pdata->y;
-	if(new_x == x && new_y == y) {
+	if(mat->flags & MAT_FLAG_STATIC) {
 		if(mat->tick) {
 			mat->tick(sim, index, x, y);
 		}
 		return;
 	}
 
+	const float terminal_v = sim->terminal_v;
+	const xy_t acceleration = sim->acceleration_map[DATA_MAP_GET_I(x, y)];
+	const float accel_x = (acceleration.x) * mat->mass * (mat->advection + 1.f);
+	const float accel_y = (acceleration.y + sim->gravity) * mat->mass * (mat->advection + 1.f);
+	pdata->vx = clampf(pdata->vx + accel_x, -terminal_v, terminal_v) * sim->air_drag;
+	pdata->vy = clampf(pdata->vy + accel_y, -terminal_v, terminal_v) * sim->air_drag;
+	const float end_x = pdata->x + pdata->vx;
+	const float end_y = pdata->y + pdata->vy;
+	float move_res_x = pdata->x;
+	float move_res_y = pdata->y;
+
+	coll_res_full_t coll = clamp_move(sim, mat_type, pdata->x, pdata->y, end_x, end_y, &move_res_x, &move_res_y);
+	pdata->x = move_res_x;
+	pdata->y = move_res_y;
+	const int new_ix = (int)pdata->x;
+	const int new_iy = (int)pdata->y;
+	if(new_ix == x && new_iy == y) {
+		if(mat->tick) {
+			mat->tick(sim, index, x, y);
+		}
+		return;
+	}
+	
 	interaction_t* interaction;
-	//if(new_x > x && can_move(sim, mat_type, new_x + 1, new_y) == COLL_CANT_MOVE) {
-	if(coll & COLL_FLAG_BOUNCE_RIGHT){
-		switch(coll & COLL_TYPE_MASK) {
-		case COLL_CANT_MOVE:
-			pdata->x = (float)new_x + 0.5f;
+	////if(new_x > x && can_move(sim, mat_type, new_x + 1, new_y) == COLL_CANT_MOVE) {
+	//if(coll & COLL_FLAG_BOUNCE_RIGHT){
+	//	switch(coll & COLL_TYPE_MASK) {
+	//	case COLL_CANT_MOVE:
+	//		pdata->x = (float)new_ix + 0.5f;
+	//		pdata->vx = 0;
+	//		break;
+	//	case COLL_REPLACE:
+	//		pdata->x = (float)new_ix + 0.5f;
+	//		pdata->vx = 0;
+	//		break;
+	//	case COLL_SWAP:
+	//		interaction = sim->interactions + INTERACTION_GET_I(mat_type, grid[GRID_GET_I(new_ix + 1, new_iy)]);
+	//		pdata->vx = -pdata->vx * interaction->bounce;
+	//		float dev = 1.f + interaction->bounce_deviation * rand_sign(&sim->rand_state); // TODO: i guess also scale other velocity by dev
+	//		pdata->vy = pdata->vy * dev;
+	//		break;
+	//	default: NODEFAULT;
+	//	}
+	////}else if(new_x < x && can_move(sim, mat_type, new_x - 1, new_y) == COLL_CANT_MOVE) {
+	//}else if(coll & COLL_FLAG_BOUNCE_LEFT){
+	//	switch(coll & COLL_TYPE_MASK) {
+	//	case COLL_CANT_MOVE:
+	//		pdata->x = (float)new_ix + 0.5f;
+	//		pdata->vx = 0;
+	//		break;
+	//	case COLL_REPLACE:
+	//		pdata->x = (float)new_ix + 0.5f;
+	//		pdata->vx = 0;
+	//		break;
+	//	case COLL_SWAP:
+	//		interaction = sim->interactions + INTERACTION_GET_I(mat_type, grid[GRID_GET_I((new_ix - 1 >= 0) ? new_ix - 1 : GRID_WIDTH, new_iy)]);
+	//		pdata->vx = -pdata->vx * interaction->bounce;
+	//		float dev = 1.f + interaction->bounce_deviation * rand_sign(&sim->rand_state);
+	//		pdata->vy = pdata->vy * dev;
+	//		break;
+	//	default: NODEFAULT;
+	//	}
+	//}
+	////if(new_y > y && can_move(sim, mat_type, new_x, new_y + 1) == COLL_CANT_MOVE) {
+	//if(coll & COLL_FLAG_BOUNCE_DOWN){
+	//	switch(coll & COLL_TYPE_MASK) {
+	//	case COLL_CANT_MOVE:
+	//		pdata->y = (float)new_iy + 0.5f;
+	//		pdata->vy = 0;
+	//		break;
+	//	case COLL_REPLACE:
+	//		pdata->y = (float)new_iy + 0.5f;
+	//		pdata->vy = 0;
+	//		break;
+	//	case COLL_SWAP:
+	//		interaction = sim->interactions + INTERACTION_GET_I(mat_type, grid[GRID_GET_I(new_ix, new_iy + 1)]);
+	//		pdata->vy = -pdata->vy * interaction->bounce;
+	//		float dev = 1.f + interaction->bounce_deviation * rand_sign(&sim->rand_state);
+	//		pdata->vx = pdata->vx * dev;
+	//		break;
+	//	default: NODEFAULT;
+	//	}
+	////}else if(new_y < y && can_move(sim, mat_type, new_y, new_y - 1) == COLL_CANT_MOVE) {
+	//}else if(coll & COLL_FLAG_BOUNCE_UP){
+	//	switch(coll & COLL_TYPE_MASK) {
+	//	case COLL_CANT_MOVE:
+	//		pdata->y = (float)new_iy + 0.5f;
+	//		pdata->vy = 0;
+	//		break;
+	//	case COLL_REPLACE:
+	//		pdata->y = (float)new_iy + 0.5f;
+	//		pdata->vy = 0;
+	//		break;
+	//	case COLL_SWAP:
+	//		interaction = sim->interactions + INTERACTION_GET_I(mat_type, grid[GRID_GET_I(new_ix, (new_iy - 1 >= 0) ? new_iy - 1 : GRID_HEIGHT)]);
+	//		pdata->vy = -pdata->vy * interaction->bounce;
+	//		float dev = 1.f + interaction->bounce_deviation * rand_sign(&sim->rand_state);
+	//		pdata->vx = pdata->vx * dev;
+	//		break;
+	//	default: NODEFAULT;
+	//	}
+	//}
+
+	switch(coll & COLL_TYPE_MASK) {
+	case COLL_CANT_MOVE:
+
+		if(coll & (COLL_FLAG_BOUNCE_RIGHT | COLL_FLAG_BOUNCE_LEFT)){
+			pdata->x = (float)new_ix + 0.5f;
 			pdata->vx = 0;
-			break;
-		case COLL_REPLACE:
-			pdata->x = (float)new_x + 0.5f;
+		}
+		if(coll & (COLL_FLAG_BOUNCE_DOWN | COLL_FLAG_BOUNCE_UP)) {
+			pdata->y = (float)new_iy + 0.5f;
+			pdata->vy = 0;
+		}
+		break;
+	case COLL_REPLACE: 
+		if(coll & (COLL_FLAG_BOUNCE_RIGHT | COLL_FLAG_BOUNCE_LEFT)){
+			pdata->x = (float)new_ix + 0.5f;
 			pdata->vx = 0;
-			break;
-		case COLL_SWAP:
-			interaction = sim->interactions + INTERACTION_GET_I(mat_type, grid[GRID_GET_I(new_x + 1, new_y)]);
+		}
+		if(coll & (COLL_FLAG_BOUNCE_DOWN | COLL_FLAG_BOUNCE_UP)) {
+			pdata->y = (float)new_iy + 0.5f;
+			pdata->vy = 0;
+		}
+		break;
+	case COLL_SWAP: 
+		if(coll & COLL_FLAG_BOUNCE_RIGHT){
+			interaction = sim->interactions + INTERACTION_GET_I(mat_type, grid[GRID_GET_I(new_ix + 1, new_iy)]);
 			pdata->vx = -pdata->vx * interaction->bounce;
+			printf("R%f\n", interaction->bounce);
 			float dev = 1.f + interaction->bounce_deviation * rand_sign(&sim->rand_state); // TODO: i guess also scale other velocity by dev
 			pdata->vy = pdata->vy * dev;
-			break;
-		default: NODEFAULT;
-		}
-	//}else if(new_x < x && can_move(sim, mat_type, new_x - 1, new_y) == COLL_CANT_MOVE) {
-	}else if(coll & COLL_FLAG_BOUNCE_LEFT){
-		switch(coll & COLL_TYPE_MASK) {
-		case COLL_CANT_MOVE:
-			pdata->x = (float)new_x + 0.5f;
-			pdata->vx = 0;
-			break;
-		case COLL_REPLACE:
-			pdata->x = (float)new_x + 0.5f;
-			pdata->vx = 0;
-			break;
-		case COLL_SWAP:
-			interaction = sim->interactions + INTERACTION_GET_I(mat_type, grid[GRID_GET_I((new_x - 1 >= 0) ? new_x - 1 : GRID_WIDTH, new_y)]);
+		} else if(coll & COLL_FLAG_BOUNCE_LEFT) {
+			interaction = sim->interactions + INTERACTION_GET_I(mat_type, grid[GRID_GET_I((new_ix - 1 >= 0) ? new_ix - 1 : GRID_WIDTH, new_iy)]);
 			pdata->vx = -pdata->vx * interaction->bounce;
+			printf("L%f\n", interaction->bounce);
 			float dev = 1.f + interaction->bounce_deviation * rand_sign(&sim->rand_state);
 			pdata->vy = pdata->vy * dev;
-			break;
-		default: NODEFAULT;
 		}
-	}
-	//if(new_y > y && can_move(sim, mat_type, new_x, new_y + 1) == COLL_CANT_MOVE) {
-	if(coll & COLL_FLAG_BOUNCE_DOWN){
-		switch(coll & COLL_TYPE_MASK) {
-		case COLL_CANT_MOVE:
-			pdata->y = (float)new_y + 0.5f;
-			pdata->vy = 0;
-			break;
-		case COLL_REPLACE:
-			pdata->y = (float)new_y + 0.5f;
-			pdata->vy = 0;
-			break;
-		case COLL_SWAP:
-			interaction = sim->interactions + INTERACTION_GET_I(mat_type, grid[GRID_GET_I(new_x, new_y + 1)]);
+		if(coll & COLL_FLAG_BOUNCE_DOWN) {
+			interaction = sim->interactions + INTERACTION_GET_I(mat_type, grid[GRID_GET_I(new_ix, new_iy + 1)]);
 			pdata->vy = -pdata->vy * interaction->bounce;
+			printf("D%f\n", interaction->bounce);
 			float dev = 1.f + interaction->bounce_deviation * rand_sign(&sim->rand_state);
 			pdata->vx = pdata->vx * dev;
-			break;
-		default: NODEFAULT;
-		}
-	//}else if(new_y < y && can_move(sim, mat_type, new_y, new_y - 1) == COLL_CANT_MOVE) {
-	}else if(coll & COLL_FLAG_BOUNCE_UP){
-		switch(coll & COLL_TYPE_MASK) {
-		case COLL_CANT_MOVE:
-			pdata->y = (float)new_y + 0.5f;
-			pdata->vy = 0;
-			break;
-		case COLL_REPLACE:
-			pdata->y = (float)new_y + 0.5f;
-			pdata->vy = 0;
-			break;
-		case COLL_SWAP:
-			interaction = sim->interactions + INTERACTION_GET_I(mat_type, grid[GRID_GET_I(new_x, (new_y - 1 >= 0) ? new_y - 1 : GRID_HEIGHT)]);
+		} else if(coll & COLL_FLAG_BOUNCE_UP) {
+			interaction = sim->interactions + INTERACTION_GET_I(mat_type, grid[GRID_GET_I(new_ix, (new_iy - 1 >= 0) ? new_iy - 1 : GRID_HEIGHT)]);
 			pdata->vy = -pdata->vy * interaction->bounce;
+			printf("U%f\n", interaction->bounce);
 			float dev = 1.f + interaction->bounce_deviation * rand_sign(&sim->rand_state);
 			pdata->vx = pdata->vx * dev;
-			break;
-		default: NODEFAULT;
 		}
+		break;
+	default: NODEFAULT;
 	}
 
-	int new_index = GRID_GET_I(new_x, new_y);
+	const int new_index = GRID_GET_I(new_ix, new_iy);
 	if(mat->tick) {
-		mat->tick(sim, new_index, new_x, new_y);
+		mat->tick(sim, new_index, new_ix, new_iy);
 	}
 
 	sim->particles[new_index].x = x;
@@ -431,7 +583,7 @@ static force_inline void handle_cell(simulation_t* sim, int index/*, int x, int 
 static force_inline void process_cell(simulation_t* sim, int index/*, int x, int y*/) {
 	//printf("\npre: %d %d\n", x, y);
 	//printf("x: %d, y: %d, nx: %d, ny: %d\n", x, y, new_x, new_y);
-	handle_cell(sim, index/*, x, y*/);
+	move_cell(sim, index/*, x, y*/);
 }
 
 void simulation_tick(simulation_t* sim) {
@@ -442,18 +594,6 @@ void simulation_tick(simulation_t* sim) {
 	pdata_t* pdata;
 	int* index_shuffle = sim->index_shuffle;
 	int index, x, y;
-
-	//static int counter = 0;
-	//static float wind_dir = 1.f;
-	//static float wind_inc = 0.f;
-	//if(counter % 2 == 0) {
-	//	wind_inc = (xorshift32_n(&sim->rand_state, 200) / 200.f) * 0.03f;
-	//}
-	//if(counter % 5 == 0) {
-	//	wind_dir = rand_sign(&sim->rand_state);
-	//}
-	//wind += wind_inc * wind_dir;
-	//counter++;
 
 	bitset_clear(sim->updated_cells_bitset, BITSET_SIZE_ARRAY(GRID_SIZE));
 	for(int y_ = 0; y_ < GRID_HEIGHT; y_++) {

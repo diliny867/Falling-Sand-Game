@@ -1,7 +1,5 @@
 #pragma once
 
-#include <assert.h>
-
 #include "common.h"
 #include "materials_common.h"
 #include "../include/bitset.h"
@@ -29,8 +27,8 @@
 #define GRID_GET_I(x, y) ARRAY2D_GET_I((x), (y), GRID_WIDTH)
 #define INTERACTION_GET_I(mat1, mat2) ARRAY2D_GET_I((mat1), (mat2), MATERIALS_COUNT + 1)
 #define DATA_MAP_GET_I(x, y) ARRAY2D_GET_I((x) >> 2, (y) >> 2, GRID_CELLS_WIDTH)
-#define GRID_INDEX_GET_Y(index) (index) / GRID_WIDTH
-#define GRID_INDEX_GET_X(index) (index) % GRID_WIDTH
+//#define GRID_INDEX_GET_Y(index) (index) / GRID_WIDTH
+//#define GRID_INDEX_GET_X(index) (index) % GRID_WIDTH
 #define GRID_INDEX_GET_XY(index, x, y) (y) = (index) / GRID_WIDTH; (x) = (index) - (y) * GRID_WIDTH
 
 // Outer bounds do/dont stop particles, TODO: implement 
@@ -67,6 +65,7 @@ typedef struct {
 	coll_res_typeonly_t collision;
 	float bounce;
 	float bounce_deviation;
+	float friction;
 } interaction_t;
 #define BOUNCE_DEVIATION_MAX 0.5f
 
